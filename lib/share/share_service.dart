@@ -12,10 +12,12 @@ abstract final class ShareService {
       'Check out my 360° photo! Captured with 360Sphere';
 
   static Future<void> shareFile(String path) async {
-    await Share.shareXFiles(
-      [XFile(path)],
-      text: shareText,
-      subject: '360° photo',
+    await SharePlus.instance.share(
+      ShareParams(
+        files: [XFile(path)],
+        text: shareText,
+        subject: '360° photo',
+      ),
     );
   }
 
