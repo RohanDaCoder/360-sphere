@@ -15,7 +15,9 @@ abstract final class ExifOrientation {
     while (i + 4 <= jpeg.length) {
       if (jpeg[i] != 0xFF) return 1;
       final marker = jpeg[i + 1];
-      if (marker == 0xD8 || marker == 0x01 || (marker >= 0xD0 && marker <= 0xD7)) {
+      if (marker == 0xD8 ||
+          marker == 0x01 ||
+          (marker >= 0xD0 && marker <= 0xD7)) {
         i += 2;
         continue;
       }

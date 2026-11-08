@@ -21,7 +21,11 @@ class CaptureHud extends StatelessWidget {
         return IgnorePointer(
           child: Stack(
             children: [
-              Center(child: _Reticle(elevation: elevation, heading: heading, controller: controller)),
+              Center(
+                  child: _Reticle(
+                      elevation: elevation,
+                      heading: heading,
+                      controller: controller)),
             ],
           ),
         );
@@ -31,7 +35,10 @@ class CaptureHud extends StatelessWidget {
 }
 
 class _Reticle extends StatelessWidget {
-  const _Reticle({required this.elevation, required this.heading, required this.controller});
+  const _Reticle(
+      {required this.elevation,
+      required this.heading,
+      required this.controller});
 
   final double elevation;
   final double heading;
@@ -79,7 +86,8 @@ class _HudPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     const track = Color(0x33FFFFFF);
-    final active = capturing ? const Color(0xFFE64A19) : const Color(0xAAFFFFFF);
+    final active =
+        capturing ? const Color(0xFFE64A19) : const Color(0xAAFFFFFF);
 
     // Yaw coverage ring (top view compass).
     final ringPaint = Paint()
@@ -119,8 +127,10 @@ class _HudPainter extends CustomPainter {
     final cross = Paint()
       ..color = active
       ..strokeWidth = 2;
-    canvas.drawLine(center - const Offset(16, 0), center + const Offset(16, 0), cross);
-    canvas.drawLine(center - const Offset(0, 16), center + const Offset(0, 16), cross);
+    canvas.drawLine(
+        center - const Offset(16, 0), center + const Offset(16, 0), cross);
+    canvas.drawLine(
+        center - const Offset(0, 16), center + const Offset(0, 16), cross);
 
     // Next-gap arrow.
     if (gap != null) {
@@ -161,7 +171,10 @@ class _HudPainter extends CustomPainter {
     final head = to;
     final p1 = head - unit * 14 + perp * 8;
     final p2 = head - unit * 14 - perp * 8;
-    final fill = Paint()..color = color..style = PaintingStyle.stroke..strokeWidth = 4;
+    final fill = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 4;
     canvas.drawLine(head, p1, fill);
     canvas.drawLine(head, p2, fill);
   }

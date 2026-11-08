@@ -80,8 +80,7 @@ class _My360sScreenState extends State<My360sScreen> {
                   repository: context.read<SphereRepository>(),
                   onTap: () async {
                     await Navigator.of(context).push(MaterialPageRoute(
-                      builder: (_) =>
-                          SphereDetailScreen(sphereId: sphere.id),
+                      builder: (_) => SphereDetailScreen(sphereId: sphere.id),
                     ));
                     _reload();
                   },
@@ -96,7 +95,8 @@ class _My360sScreenState extends State<My360sScreen> {
 }
 
 class _SphereTile extends StatelessWidget {
-  const _SphereTile({required this.sphere, required this.repository, required this.onTap});
+  const _SphereTile(
+      {required this.sphere, required this.repository, required this.onTap});
 
   final Photosphere sphere;
   final SphereRepository repository;
@@ -129,7 +129,8 @@ class _SphereTile extends StatelessWidget {
                     const Positioned(
                       top: 6,
                       right: 6,
-                      child: Icon(Icons.public, size: 16, color: Colors.white70),
+                      child:
+                          Icon(Icons.public, size: 16, color: Colors.white70),
                     ),
                 ],
               ),
@@ -141,7 +142,9 @@ class _SphereTile extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                    fontFamily: 'Montserrat', fontSize: 12, fontWeight: FontWeight.w600),
+                    fontFamily: 'Montserrat',
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600),
               ),
             ),
           ],

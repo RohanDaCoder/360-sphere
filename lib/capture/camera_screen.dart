@@ -291,7 +291,8 @@ class _BottomControls extends StatelessWidget {
                           ? AppTheme.accent.withValues(alpha: 0.35)
                           : Colors.transparent,
                     ),
-                    child: const Icon(Icons.camera, color: Colors.white, size: 36),
+                    child:
+                        const Icon(Icons.camera, color: Colors.white, size: 36),
                   ),
                 ),
                 IconButton(

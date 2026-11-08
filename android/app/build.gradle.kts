@@ -4,6 +4,13 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
+// Release signing: when ANDROID_KEYSTORE_FILE points at a keystore (CI decodes
+// it from the ANDROID_KEYSTORE_BASE64 secret), sign the release build with it;
+// otherwise fall back to debug signing so local and secret-less CI builds work.
+val releaseKeystoreFile = System.getenv("ANDROID_KEYSTORE_FILE")
+val hasReleaseKeystore =
+    !releaseKeystoreFile.isNullOrBlank() && file(releaseKeystoreFile).exists()
+
 android {
     namespace = "com.rohandacoder.sphere360"
     compileSdk = flutter.compileSdkVersion
@@ -12,6 +19,17 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    if (hasReleaseKeystore) {
+        signingConfigs {
+            create("release") {
+                storeFile = file(releaseKeystoreFile)
+                storePassword = System.getenv("ANDROID_STORE_PASSWORD")
+                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
     }
 
     defaultConfig {
@@ -33,9 +51,13 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                // No keystore provided (local build / CI without secrets):
+                // sign with debug keys so the APK is still installable.
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

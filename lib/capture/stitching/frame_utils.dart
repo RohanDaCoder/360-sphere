@@ -58,7 +58,8 @@ abstract final class FrameUtils {
 
   /// Rotate by an exact multiple of 90° (used by the aspect heuristic when
   /// the JPEG carries no usable EXIF).
-  static Future<ui.Image> rotateQuarter(ui.Image image, {required bool clockwise}) =>
+  static Future<ui.Image> rotateQuarter(ui.Image image,
+          {required bool clockwise}) =>
       _rotateQuarter(image, clockwise: clockwise);
 
   static Future<ui.Image> _rotateQuarter(ui.Image image,
@@ -66,11 +67,11 @@ abstract final class FrameUtils {
     final recorder = ui.PictureRecorder();
     final w = image.width.toDouble();
     final h = image.height.toDouble();
-    final canvas = ui.Canvas(
-        recorder, ui.Rect.fromLTWH(0, 0, h, w));
+    final canvas = ui.Canvas(recorder, ui.Rect.fromLTWH(0, 0, h, w));
     canvas.translate(clockwise ? h : 0, clockwise ? 0 : w);
     canvas.rotate(clockwise ? math.pi / 2 : -math.pi / 2);
-    canvas.drawImage(image, ui.Offset.zero, Paint()..filterQuality = FilterQuality.medium);
+    canvas.drawImage(
+        image, ui.Offset.zero, Paint()..filterQuality = FilterQuality.medium);
     final p = recorder.endRecording();
     final out = await p.toImage(image.height, image.width);
     p.dispose();
@@ -80,7 +81,9 @@ abstract final class FrameUtils {
   static Future<ui.Image> _rotate(ui.Image image, double radians) async {
     final recorder = ui.PictureRecorder();
     final canvas = ui.Canvas(
-        recorder, ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble()));
+        recorder,
+        ui.Rect.fromLTWH(
+            0, 0, image.width.toDouble(), image.height.toDouble()));
     canvas.translate(image.width / 2, image.height / 2);
     canvas.rotate(radians);
     canvas.drawImage(image, ui.Offset(-image.width / 2, -image.height / 2),
@@ -113,7 +116,8 @@ abstract final class FrameUtils {
       canvas.translate(src.width.toDouble(), 0);
       canvas.scale(-1, 1);
     }
-    canvas.drawImage(src, ui.Offset.zero, Paint()..filterQuality = FilterQuality.medium);
+    canvas.drawImage(
+        src, ui.Offset.zero, Paint()..filterQuality = FilterQuality.medium);
     final p = recorder.endRecording();
     final out = await p.toImage(src.width, src.height);
     p.dispose();
@@ -122,10 +126,13 @@ abstract final class FrameUtils {
 
   static Future<ui.Image> _resample(ui.Image image, int w, int h) async {
     final recorder = ui.PictureRecorder();
-    final canvas = ui.Canvas(recorder, ui.Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()));
-    final src = ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
+    final canvas =
+        ui.Canvas(recorder, ui.Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble()));
+    final src =
+        ui.Rect.fromLTWH(0, 0, image.width.toDouble(), image.height.toDouble());
     final dst = ui.Rect.fromLTWH(0, 0, w.toDouble(), h.toDouble());
-    canvas.drawImageRect(image, src, dst, Paint()..filterQuality = FilterQuality.medium);
+    canvas.drawImageRect(
+        image, src, dst, Paint()..filterQuality = FilterQuality.medium);
     final p = recorder.endRecording();
     final out = await p.toImage(w, h);
     p.dispose();
@@ -134,7 +141,8 @@ abstract final class FrameUtils {
 
   /// Encode a [ui.Image] to JPEG bytes via package:image (Street View and
   /// the Photo Sphere Viewer both expect JPEG).
-  static Future<Uint8List> encodeJpeg(ui.Image image, {int quality = 88}) async {
+  static Future<Uint8List> encodeJpeg(ui.Image image,
+      {int quality = 88}) async {
     final data =
         await image.toByteData(format: ui.ImageByteFormat.rawStraightRgba);
     if (data == null) throw StateError('Could not read image bytes');
@@ -151,7 +159,8 @@ abstract final class FrameUtils {
   }
 
   /// Downscaled JPEG thumbnail for the gallery grid.
-  static Future<Uint8List> makeThumbnail(ui.Image image, {int longEdge = 512}) async {
+  static Future<Uint8List> makeThumbnail(ui.Image image,
+      {int longEdge = 512}) async {
     final scale = longEdge / math.max(image.width, image.height);
     final w = math.max(1, (image.width * scale).round());
     final h = math.max(1, (image.height * scale).round());

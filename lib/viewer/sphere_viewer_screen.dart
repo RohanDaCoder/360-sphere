@@ -101,8 +101,8 @@ class _SphereViewerScreenState extends State<SphereViewerScreen> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-            content:
-                Text('Gyroscope mode requested — allow motion access if prompted.')),
+            content: Text(
+                'Gyroscope mode requested — allow motion access if prompted.')),
       );
     }
   }

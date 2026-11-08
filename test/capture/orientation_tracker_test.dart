@@ -53,8 +53,8 @@ void main() {
       // Truth: upright portrait tilted 30° back. Compute the accelerometer
       // reading for that pose; start the tracker at identity so the gravity
       // correction must close a 60° gap (identity→upright) plus the tilt.
-      final trueQ =
-          Quaternion.axisAngle(const Vector3(1, 0, 0), math.pi / 2 - math.pi / 6);
+      final trueQ = Quaternion.axisAngle(
+          const Vector3(1, 0, 0), math.pi / 2 - math.pi / 6);
       final gravityDevice = trueQ.rotateInverse(const Vector3(0, 0, 9.8));
 
       for (var i = 0; i < 900; i++) {

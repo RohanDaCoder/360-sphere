@@ -54,7 +54,8 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
       return Scaffold(
         appBar: AppBar(),
         body: Center(
-          child: Text(_error ?? 'Loading…', style: const TextStyle(color: Colors.white54)),
+          child: Text(_error ?? 'Loading…',
+              style: const TextStyle(color: Colors.white54)),
         ),
       );
     }
@@ -112,7 +113,8 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
                   Expanded(
                     child: Text(
                       'Published to Google Street View (${sphere.streetViewPhotoId})',
-                      style: const TextStyle(fontSize: 12, color: Colors.white70),
+                      style:
+                          const TextStyle(fontSize: 12, color: Colors.white70),
                     ),
                   ),
                 ],

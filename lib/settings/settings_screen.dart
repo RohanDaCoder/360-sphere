@@ -21,8 +21,7 @@ class SettingsScreen extends StatelessWidget {
           const _SectionHeader('Capture'),
           ListTile(
             title: const Text('Output resolution'),
-            subtitle: Text(
-                '${s.equirectWidth} × ${s.equirectHeight} px '
+            subtitle: Text('${s.equirectWidth} × ${s.equirectHeight} px '
                 '(${s.equirectWidth >= 4096 ? 'Street View ready' : 'smaller, faster'})'),
             trailing: DropdownButton<int>(
               value: s.equirectWidth,
@@ -30,8 +29,8 @@ class SettingsScreen extends StatelessWidget {
                 DropdownMenuItem(value: 2048, child: Text('2048')),
                 DropdownMenuItem(value: 4096, child: Text('4096')),
               ],
-              onChanged: (v) => controller.update(
-                  controller.settings.copyWith(equirectWidth: v)),
+              onChanged: (v) => controller
+                  .update(controller.settings.copyWith(equirectWidth: v)),
             ),
           ),
           ListTile(
@@ -46,8 +45,8 @@ class SettingsScreen extends StatelessWidget {
                 max: 90,
                 divisions: 50,
                 label: '${s.cameraFovDegrees.round()}°',
-                onChanged: (v) => controller.update(
-                    controller.settings.copyWith(cameraFovDegrees: v)),
+                onChanged: (v) => controller
+                    .update(controller.settings.copyWith(cameraFovDegrees: v)),
               ),
             ),
           ),
@@ -57,8 +56,8 @@ class SettingsScreen extends StatelessWidget {
                 'Use the magnetometer to bound gyro yaw drift. Disable near strong magnetic fields.',
                 style: TextStyle(fontSize: 12)),
             value: s.compassAssist,
-            onChanged: (v) =>
-                controller.update(controller.settings.copyWith(compassAssist: v)),
+            onChanged: (v) => controller
+                .update(controller.settings.copyWith(compassAssist: v)),
           ),
           const _SectionHeader('Output'),
           SwitchListTile(

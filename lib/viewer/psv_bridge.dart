@@ -68,10 +68,11 @@ class PsvBridge {
 
     for (var i = 0; i < total; i++) {
       final start = i * chunkSize;
-      final end = start + chunkSize > b64.length ? b64.length : start + chunkSize;
+      final end =
+          start + chunkSize > b64.length ? b64.length : start + chunkSize;
       final part = b64.substring(start, end);
-      await controller.runJavaScript(
-          'window.appendChunk($i, $total, "${_escape(part)}")');
+      await controller
+          .runJavaScript('window.appendChunk($i, $total, "${_escape(part)}")');
     }
     await controller.runJavaScript('window.finalizeImage()');
   }

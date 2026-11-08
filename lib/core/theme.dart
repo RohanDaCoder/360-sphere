@@ -48,8 +48,10 @@ abstract final class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: accent,
           foregroundColor: Colors.white,
-          textStyle: const TextStyle(fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          textStyle: const TextStyle(
+              fontFamily: 'Montserrat', fontWeight: FontWeight.w600),
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
       inputDecorationTheme: InputDecorationTheme(

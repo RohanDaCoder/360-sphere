@@ -22,7 +22,8 @@ class StreetViewPublishService {
   static const String _base = 'https://streetviewpublish.googleapis.com/v1';
 
   /// Scope required by the API.
-  static const String scope = 'https://www.googleapis.com/auth/streetviewpublish';
+  static const String scope =
+      'https://www.googleapis.com/auth/streetviewpublish';
 
   final http.Client _client;
   final http.Client _uploadClient;
@@ -41,8 +42,8 @@ class StreetViewPublishService {
       body: '{}',
     );
     _check(res, 'photo:startUpload');
-    final uploadUrl = (jsonDecode(res.body) as Map<String, dynamic>)['uploadUrl']
-        as String?;
+    final uploadUrl =
+        (jsonDecode(res.body) as Map<String, dynamic>)['uploadUrl'] as String?;
     if (uploadUrl == null || uploadUrl.isEmpty) {
       throw StreetViewException('startUpload returned no uploadUrl');
     }

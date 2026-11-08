@@ -101,8 +101,8 @@ void main() {
 
       // The camera aim (north, lon=0) should map to canvas x ≈ 2048.
       final fwd = q.rotate(const Vector3(0, 0, -1));
-      final aimPixel =
-          Equirect.pixelOf(Equirect.lonOf(fwd), Equirect.latOf(fwd), 4096, 2048);
+      final aimPixel = Equirect.pixelOf(
+          Equirect.lonOf(fwd), Equirect.latOf(fwd), 4096, 2048);
       var minDist = double.infinity;
       for (final p in mesh.positions) {
         final d = (p - aimPixel).distance;
@@ -123,7 +123,8 @@ void main() {
       expect(opaqueCount, greaterThan(mesh.alphas.length * 0.3));
     });
 
-    test('seam-crossing mesh extends outside the canvas (for shifted redraw)', () {
+    test('seam-crossing mesh extends outside the canvas (for shifted redraw)',
+        () {
       final projector = FrameProjector();
       final cam = FrameCamera(fovHDeg: 60, imageWidth: 1600, imageHeight: 1200);
 
@@ -143,8 +144,7 @@ void main() {
       final minX = xs.reduce(math.min);
       final maxX = xs.reduce(math.max);
       // Either the mesh crosses 0 or 4096 (positions are unwrapped).
-      expect(minX < 0 || maxX > 4096, isTrue,
-          reason: 'minX=$minX maxX=$maxX');
+      expect(minX < 0 || maxX > 4096, isTrue, reason: 'minX=$minX maxX=$maxX');
     });
 
     test('triangle expansion drops invisible quads only', () {

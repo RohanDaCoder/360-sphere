@@ -91,8 +91,8 @@ class OrientationTracker {
     if (yawErr.abs() < 1e-6) return;
 
     // Correct around the world up axis (world-frame rotation).
-    final dq = Quaternion.axisAngle(
-        const Vector3(0, 0, 1), -magGain * dt * yawErr);
+    final dq =
+        Quaternion.axisAngle(const Vector3(0, 0, 1), -magGain * dt * yawErr);
     _q = (dq * _q).normalized();
   }
 

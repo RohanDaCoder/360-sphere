@@ -9,7 +9,8 @@ import 'equirect_projection.dart';
 
 /// Coverage bookkeeping for the capture HUD.
 class CoverageTracker {
-  CoverageTracker({this.lonBins = 36, this.latBins = 18, this.fullSphere = true});
+  CoverageTracker(
+      {this.lonBins = 36, this.latBins = 18, this.fullSphere = true});
 
   final int lonBins;
   final int latBins;
@@ -69,7 +70,8 @@ class CoverageTracker {
         final lon = -math.pi + (ilon + 0.5) / lonBins * 2 * math.pi;
         var dLon = (lon - headingRad).abs();
         if (dLon > math.pi) dLon = 2 * math.pi - dLon;
-        final d = math.sqrt(dLon * dLon + (lat - elevationRad) * (lat - elevationRad));
+        final d = math
+            .sqrt(dLon * dLon + (lat - elevationRad) * (lat - elevationRad));
         if (d < bestDist) {
           bestDist = d;
           best = (lon, lat);
@@ -191,8 +193,8 @@ class EquirectStitcher {
   Future<ui.Image> finalize({bool watermark = false}) async {
     if (_accumulated == null) {
       final recorder = ui.PictureRecorder();
-      final canvas =
-          ui.Canvas(recorder, ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
+      final canvas = ui.Canvas(recorder,
+          ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
       canvas.drawRect(
           ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
           Paint()..color = const ui.Color(0xFF101214));
@@ -204,8 +206,8 @@ class EquirectStitcher {
     if (!watermark) return _accumulated!;
 
     final recorder = ui.PictureRecorder();
-    final canvas =
-        ui.Canvas(recorder, ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
+    final canvas = ui.Canvas(
+        recorder, ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
     canvas.drawImage(_accumulated!, ui.Offset.zero, Paint());
 
     const label = '360sphere';

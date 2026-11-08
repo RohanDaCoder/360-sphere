@@ -63,7 +63,10 @@ abstract final class Equirect {
 /// image x-axis follows device +X and the image y-axis (downwards) follows
 /// device −Y. The back camera optical axis is device −Z.
 class FrameCamera {
-  FrameCamera({required this.fovHDeg, required this.imageWidth, required this.imageHeight})
+  FrameCamera(
+      {required this.fovHDeg,
+      required this.imageWidth,
+      required this.imageHeight})
       : fovH = fovHDeg * math.pi / 180,
         aspect = imageWidth / imageHeight;
 
@@ -80,7 +83,9 @@ class FrameCamera {
 
   /// Diagonal field of view (bounding angular radius ≈ diagonal / 2).
   double get diagonalFov =>
-      2 * math.atan(math.sqrt(tanHalfFovH * tanHalfFovH + tanHalfFovV * tanHalfFovV));
+      2 *
+      math.atan(
+          math.sqrt(tanHalfFovH * tanHalfFovH + tanHalfFovV * tanHalfFovV));
 
   /// Camera forward axis in device frame.
   static const Vector3 forward = Vector3(0, 0, -1);
@@ -193,14 +198,15 @@ class FrameProjector {
         if (uvN != null) {
           final (u, v) = uvN;
           lastUv = Offset(
-            ((u + 1) / 2 * cam.imageWidth).clamp(0.0, (cam.imageWidth - 1).toDouble()),
-            ((v + 1) / 2 * cam.imageHeight).clamp(0.0, (cam.imageHeight - 1).toDouble()),
+            ((u + 1) / 2 * cam.imageWidth)
+                .clamp(0.0, (cam.imageWidth - 1).toDouble()),
+            ((v + 1) / 2 * cam.imageHeight)
+                .clamp(0.0, (cam.imageHeight - 1).toDouble()),
           );
           // Feather: distance (radians) outside the unit frustum circle-ish.
           final angDist = _angularDistanceToFrustum(u, v, cam);
           final a = (1 - (angDist / feather)).clamp(0.0, 1.0);
-          final pos =
-              Equirect.pixelOfRaw(lon, lat, canvasWidth, canvasHeight);
+          final pos = Equirect.pixelOfRaw(lon, lat, canvasWidth, canvasHeight);
           positions.add(pos);
           uvs.add(lastUv);
           alphas.add(a);
@@ -209,8 +215,7 @@ class FrameProjector {
           // the last valid uv with alpha 0 (contributes nothing visually but
           // keeps triangle topology simple — quads with all-invisible
           // corners are dropped in [expandToTriangles]).
-          final pos =
-              Equirect.pixelOfRaw(lon, lat, canvasWidth, canvasHeight);
+          final pos = Equirect.pixelOfRaw(lon, lat, canvasWidth, canvasHeight);
           positions.add(pos);
           uvs.add(lastUv);
           alphas.add(0.0);
@@ -253,14 +258,25 @@ class FrameProjector {
         final c = a + stride;
         final d = c + 1;
         if (a >= mesh.alphas.length || d >= mesh.alphas.length) continue;
-        final visible =
-            rowVisible(i, j) || rowVisible(i + 1, j) || rowVisible(i, j + 1) || rowVisible(i + 1, j + 1);
+        final visible = rowVisible(i, j) ||
+            rowVisible(i + 1, j) ||
+            rowVisible(i, j + 1) ||
+            rowVisible(i + 1, j + 1);
         if (!visible) continue;
 
         void tri(int i0, int i1, int i2) {
-          pos..add(mesh.positions[i0])..add(mesh.positions[i1])..add(mesh.positions[i2]);
-          uv..add(mesh.uvs[i0])..add(mesh.uvs[i1])..add(mesh.uvs[i2]);
-          alpha..add(mesh.alphas[i0])..add(mesh.alphas[i1])..add(mesh.alphas[i2]);
+          pos
+            ..add(mesh.positions[i0])
+            ..add(mesh.positions[i1])
+            ..add(mesh.positions[i2]);
+          uv
+            ..add(mesh.uvs[i0])
+            ..add(mesh.uvs[i1])
+            ..add(mesh.uvs[i2]);
+          alpha
+            ..add(mesh.alphas[i0])
+            ..add(mesh.alphas[i1])
+            ..add(mesh.alphas[i2]);
         }
 
         tri(a, c, b);

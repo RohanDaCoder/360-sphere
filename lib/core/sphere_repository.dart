@@ -48,8 +48,8 @@ class SphereRepository {
     }
   }
 
-  Future<void> _writeIndex(List<Photosphere> spheres) =>
-      _indexFile.writeAsString(const JsonEncoder.withIndent('  ').convert(spheres));
+  Future<void> _writeIndex(List<Photosphere> spheres) => _indexFile
+      .writeAsString(const JsonEncoder.withIndent('  ').convert(spheres));
 
   Future<Photosphere> save({
     required String name,
@@ -60,8 +60,7 @@ class SphereRepository {
     required int frameCount,
     required bool watermarked,
   }) async {
-    final id =
-        'sp_${DateTime.now().millisecondsSinceEpoch}_${_randSuffix()}';
+    final id = 'sp_${DateTime.now().millisecondsSinceEpoch}_${_randSuffix()}';
     final imageFile = File('${spheresDir.path}/$id.jpg');
     final thumbFile = File('${thumbsDir.path}/$id.jpg');
     await imageFile.writeAsBytes(jpeg, flush: true);
@@ -84,8 +83,10 @@ class SphereRepository {
     return sphere;
   }
 
-  String imagePath(Photosphere sphere) => '${spheresDir.path}/${sphere.imageFileName}';
-  String thumbPath(Photosphere sphere) => '${thumbsDir.path}/${sphere.imageFileName}';
+  String imagePath(Photosphere sphere) =>
+      '${spheresDir.path}/${sphere.imageFileName}';
+  String thumbPath(Photosphere sphere) =>
+      '${thumbsDir.path}/${sphere.imageFileName}';
 
   Future<void> rename(Photosphere sphere, String newName) async {
     sphere.name = newName;

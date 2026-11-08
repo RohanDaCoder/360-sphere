@@ -1,5 +1,9 @@
 # 360Sphere
 
+[![Lint](https://github.com/RohanDaCoder/360-sphere/actions/workflows/lint.yml/badge.svg)](https://github.com/RohanDaCoder/360-sphere/actions/workflows/lint.yml)
+[![Test](https://github.com/RohanDaCoder/360-sphere/actions/workflows/test.yml/badge.svg)](https://github.com/RohanDaCoder/360-sphere/actions/workflows/test.yml)
+[![Release APK](https://github.com/RohanDaCoder/360-sphere/actions/workflows/apk.yml/badge.svg)](https://github.com/RohanDaCoder/360-sphere/actions/workflows/apk.yml)
+
 Capture, stitch and share **360° photospheres** — a clean-room Flutter
 recreation of the *360 Photo Cam* app architecture, including publishing to
 **Google Maps / Street View**.
@@ -36,6 +40,44 @@ flutter build apk    # release APK
 
 > Camera, gyroscope and (for publishing) location permissions are requested
 > at runtime. A physical device is required — emulators lack real sensors.
+
+## CI & releases
+
+Three GitHub Actions workflows run on every commit:
+
+| Workflow | What it does |
+| --- | --- |
+| **Lint** | `dart format` check + `flutter analyze --fatal-infos` |
+| **Test** | `flutter test --coverage`, lcov report uploaded as artifact |
+| **Release APK** | `flutter build apk --release`, APK uploaded as a run artifact |
+
+The release APK is built on **every commit** and attached to the workflow run
+as a downloadable artifact (`sphere360-v<version>-<sha>.apk`).
+
+**Publishing a release:** push a version tag and the APK is attached to a
+GitHub Release automatically:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+**Signing:** without configuration, release builds are signed with debug keys.
+To sign with your own keystore, add these repository secrets:
+
+| Secret | Value |
+| --- | --- |
+| `ANDROID_KEYSTORE_BASE64` | `base64 -w0 release.keystore` of your keystore |
+| `ANDROID_STORE_PASSWORD` | keystore password |
+| `ANDROID_KEY_ALIAS` | key alias |
+| `ANDROID_KEY_PASSWORD` | key password |
+
+Create a keystore with:
+
+```bash
+keytool -genkey -v -keystore release.keystore -alias sphere360 \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
 
 ## Project structure
 

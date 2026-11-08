@@ -182,14 +182,15 @@ class _PublishSheetState extends State<_PublishSheet> {
             style: TextStyle(color: Colors.white60, fontSize: 13, height: 1.5),
           ),
           const SizedBox(height: 16),
-          if (_phase == _PublishPhase.form || _phase == _PublishPhase.error) ...[
+          if (_phase == _PublishPhase.form ||
+              _phase == _PublishPhase.error) ...[
             Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _lat,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(signed: true, decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                        signed: true, decimal: true),
                     decoration: const InputDecoration(labelText: 'Latitude'),
                   ),
                 ),
@@ -197,8 +198,8 @@ class _PublishSheetState extends State<_PublishSheet> {
                 Expanded(
                   child: TextField(
                     controller: _lng,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(signed: true, decimal: true),
+                    keyboardType: const TextInputType.numberWithOptions(
+                        signed: true, decimal: true),
                     decoration: const InputDecoration(labelText: 'Longitude'),
                   ),
                 ),
@@ -229,8 +230,8 @@ class _PublishSheetState extends State<_PublishSheet> {
               const SizedBox(height: 8),
               Text(
                 _error!,
-                style:
-                    const TextStyle(color: AppTheme.warn, fontSize: 12, height: 1.4),
+                style: const TextStyle(
+                    color: AppTheme.warn, fontSize: 12, height: 1.4),
               ),
             ],
             const SizedBox(height: 12),
@@ -258,7 +259,8 @@ class _PublishSheetState extends State<_PublishSheet> {
                             fontWeight: FontWeight.w700, color: AppTheme.ok)),
                     const SizedBox(height: 4),
                     Text('Street View photo id: $_photoId',
-                        style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.white70)),
                     const SizedBox(height: 4),
                     const Text(
                       'It may take some time before the photo appears on Google Maps.',
