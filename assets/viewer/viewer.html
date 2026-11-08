@@ -69,22 +69,28 @@
           if (viewer) {
             viewer.setPanorama(dataUrl);
           } else {
+            // Configuration mirrors the original app's viewer.html:
+            // no built-in navbar (custom app-bar buttons instead), zoom
+            // level 0, autorotate at 3rpm that does NOT autostart (the Play
+            // button starts it), gyroscope with touchmove enabled.
             viewer = new PhotoSphereViewer.Viewer({
               container: 'viewer',
               panorama: dataUrl,
               caption: '360Sphere',
-              navbar: ['zoom', 'move', 'download', 'caption', 'fullscreen'],
+              navbar: false,
               defaultZoomLvl: 0,
               minFov: 40,
               maxFov: 100,
               useTouchData: true,
               plugins: [
                 [PhotoSphereViewer.AutorotatePlugin, {
-                  autostartDelay: 1200,
                   autostartOnIdle: false,
-                  angularSpeed: '0.4rpm'
+                  autorotateSpeed: '3rpm'
                 }],
-                [PhotoSphereViewer.GyroscopePlugin, { touch: false }]
+                [PhotoSphereViewer.GyroscopePlugin, {
+                  touchmove: true,
+                  absolutePosition: false
+                }]
               ]
             });
           }

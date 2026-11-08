@@ -38,7 +38,9 @@ class _SphereViewerScreenState extends State<SphereViewerScreen> {
   late final WebViewController _controller;
   late final Future<void> _loaded;
 
-  bool _autorotate = true;
+  /// Autorotate starts OFF, matching the original app (its Play button is
+  /// what starts the 3rpm rotation).
+  bool _autorotate = false;
   bool _gyro = false;
 
   @override

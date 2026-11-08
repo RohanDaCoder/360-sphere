@@ -41,11 +41,84 @@ Evidence: `MainApplication` extends `DefaultReactNativeHost` with `isHermesEnabl
 
 ### Screens (from the bundle's string table)
 
-`RootNavigator` → bottom tabs / stack: **Camera, Capture, Community, My360s, Premium, Settings, Stitching, Subscription**.
+`RootNavigator` → bottom tabs / stack: **Camera, Capture, Community, My360s, Premium, Settings, Stitching, Subscription** — plus **PhotoNameScreen** (photo name + description editor) and **PhotoActionsModal**.
 
 ### Capture modes
 
 `panorama-wide-angle`, `panorama-vertical`, `panorama-horizontal`, `panorama-fisheye`, plus the flagship **photosphere** (gyroscope-guided) — icon names recovered from the bundle strings.
+
+### Deep findings (Wave 2)
+
+#### The native `OrientationAngle` module
+
+`com.reactnativeorientationangle.OrientationAngleModule` (decompiled with
+apkscope — the only app-owned native module besides `MainActivity`,
+`InAppReviewModule` and `MainApplication`):
+
+- listens to `TYPE_GAME_ROTATION_VECTOR` (fallback `TYPE_ROTATION_VECTOR`)
+  on a dedicated `HandlerThread`, throttled to 30 ms;
+- converts the quaternion to camera-pose euler angles
+  (`pitch−90°`, `roll = asin(2(wy−xz))`, `yaw = −atan2(2(xy+wz), 1−2(y²+z²))`);
+- clamps raw yaw deltas to ±25° per reading, low-pass filters pitch/roll/yaw
+  with α = 0.8 (yaw differences on the wrapped circle, `normalizeAngle`
+  only guards ±360);
+- emits `pitch`/`roll`/`yaw` events consumed by the capture worklet.
+
+Ported verbatim in `lib/capture/orientation/original_orientation_filter.dart`
+(see [REVISION.md](REVISION.md) §Wave 2).
+
+#### Stitching is server-side
+
+The photosphere pipeline uploads captured frames to the backend
+(`https://360app.dospace.tech`, AWS S3 presigned URLs) and **the cloud
+stitches**. The app polls photo state:
+
+```text
+GET /photo/{id}?view=INCLUDE_DOWNLOAD_URL   (Bearer token)
+  processingState: PENDING | PROCESSING | PROCESSED | FAILED
+  transferStatus:  NEVER_TRANSFERRED | PROCESSING | COMPLETED | REJECTED
+                  | EXPIRED | CANCELLED | RECEIVED_VIA_TRANSFER
+  mapsPublishStatus: PUBLISHED | REJECTED | REJECTED_UNKNOWN | …
+```
+
+While rendering, the processing card shows the thumbnail plus
+`"Stitching... Step X/4"` → `"Finishing... Step 4/4"` with a 46-frame
+animation (`assets/rendering/frame_0..45.jpg`) cycled by a 1300 ms
+`setInterval` (`useRenderingHistoriesUpdater` incrementing a
+`renderingCnt` in the app's persistent store). The GPano XMP metadata on
+finished photos is added by this server pipeline.
+
+#### Street View alert mapping (recovered verbatim)
+
+`Upload Failed` · `Location Required` · `Photo Too Large` ·
+`Already Uploaded` · `Connection Error` · `Not a 360° Photo` ·
+`Google Account Token Expired` · `Permission Required` — classified from
+the error text (`includes(…)`) after `photo:startUpload` / upload /
+`photo.create`. Ported in `lib/maps/streetview_errors.dart`.
+
+#### Viewer internals
+
+`assets/viewer/` bundles **two** WebView viewers: `viewer1.html`
+(Photo Sphere Viewer 4, script tags) and `viewer.html` (PSV 5 "upgrade",
+ESM import map) — both with autorotate + gyroscope plugins and a spatial
+comment marker layer (`load-comments` / `add-comment` / `fly-to` /
+long-press → `{yaw, pitch}` via `getIntersections`). Configuration:
+`navbar: false`, `defaultZoomLvl: 0`, autorotate `3rpm` without
+autostart, gyroscope `touchmove: true, absolutePosition: false`.
+
+#### Remaining UX strings recovered
+
+- Onboarding: `"Plant your feet and rotate in one spot."`,
+  `"Stand 3-4 feet away from nearby objects or surfaces."`
+- Photo details: `"Photo name"` (maxLength 200), `"Photo description"`,
+  `"Photo name can't be empty"`
+- Import: `"Imported Photo"`, `"Not a 360° Photo"`,
+  `"Failed to import file"`, `/temp_import_` temp dir
+- Analytics events (`Import_Button_Pressed`, `Capture_Button_Pressed`,
+  `Save_Button_Tapped_On_PhotoNameScreen`, `StreetView_Upload_Button_Tapped`,
+  `Play/Gyroscope/Menu/Close/Delete/Download/Google_Maps/Share/Post/Unlock_
+  Button_Tapped_On_*_Viewer_Screen`, …) — the full button map of every
+  screen.
 
 ### Feature inventory (evidence strings)
 
@@ -87,15 +160,24 @@ AWS S3 presigned uploads power photo storage; short links power sharing.
 | Original feature | Recreation |
 | --- | --- |
 | Dot-target capture (33/30-dot sphere layout, hold-to-capture 3°/5°/s/400 ms) | ✅ semantics port of the `useCaptureWorklet` (`lib/capture/dots/`) |
+| Native `OrientationAngle` pipeline (game-rotation-vector euler, ±25° yaw clamp, α=0.8 low-pass) | ✅ faithful Dart port feeding the dot director (`lib/capture/orientation/original_orientation_filter.dart`) |
 | Capture modes (photosphere + horizontal / vertical / wide-angle / fisheye panoramas) | ✅ all five, incl. equidistant fisheye projection |
 | Camera sweep with gyro guidance | ✅ quaternion HUD (green targets, hold ring, arrow, coverage ring) |
+| First-run instructions ("Plant your feet…", "Stand 3-4 feet away…") | ✅ first-run overlay + help sheet |
+| 4-step processing UX ("Stitching… Step X/4" → "Finishing…") | ✅ local composite → encode → thumbnail → store, same step counter |
+| GPano XMP 360° metadata | ✅ written at stitch time, on import, checked before Street View upload |
 | Skia offscreen-texture stitching | ✅ `Canvas.drawVertices` textured mesh onto an equirect canvas (same Skia engine that Flutter renders with) |
 | Stitching pass after capture | ✅ finalize + JPEG encode (auto-finishes when all dots are captured) |
+| Photo name + description (PhotoNameScreen) | ✅ detail-screen editor, 200-char name, same validation message |
+| Import existing 360° photos with "Not a 360° Photo" validation | ✅ My 360s import button, GPano/2:1 validation, GPano stamping |
 | My360s gallery | ✅ local file store + grid |
-| 360° viewer (PSV + three.js) | ✅ same runtime, vendored, streamed via base64 bridge; Play/autorotate, gyroscope, share, save, delete |
+| 360° viewer (PSV + three.js) | ✅ same runtime & configuration (vendored, base64 bridge); Play/autorotate, gyroscope, share, save, delete |
+| Street View error dialogs (8 classifications) | ✅ `lib/maps/streetview_errors.dart` + pre-flight check |
 | Share | ✅ file share (no backend, so no hosted viewer link) |
 | **Publish to Google Maps / Street View** | ✅ Street View Publish API v1 (see docs/GOOGLE-MAPS-UPLOAD.md) |
 | Watermark "Created in … by {author}" | ✅ author-name watermark setting |
+| Cloud stitching / rendering pipeline | ❌ out of scope (offline recreation stitches locally; same 4-step UX) |
+| Viewer comment pins / long-press coordinates | ❌ community backend feature (math documented above) |
 | Auth / community / billing / push | ❌ out of scope (core pipeline) — endpoints documented above for a future backend; see [REVISION.md](REVISION.md) for the full gap matrix |
 
 ## Legal note

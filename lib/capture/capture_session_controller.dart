@@ -13,13 +13,20 @@ import '../core/sphere_repository.dart';
 import 'dots/capture_dots.dart';
 import 'dots/dot_capture_director.dart';
 import 'orientation/orientation_tracker.dart';
+import 'orientation/original_orientation_filter.dart';
 import 'orientation/quaternion.dart';
 import 'stitching/equirect_projection.dart';
 import 'stitching/equirect_stitcher.dart';
 import 'stitching/frame_utils.dart';
+import 'stitching/xmp_pano.dart';
 
 /// States of a capture session.
 enum CapturePhase { idle, previewing, capturing, processing, done, failed }
+
+/// The original app's processing screen reports a four-step pipeline
+/// ("Stitching... Step X/4", last step labelled "Finishing"). The local
+/// equivalents here: composite → encode → thumbnail → store.
+enum ProcessingStep { composite, encode, thumbnail, store }
 
 /// Orchestrates one photosphere capture:
 /// camera → gyro-oriented frames → Skia equirect stitcher → saved sphere.
@@ -39,6 +46,11 @@ class CaptureSessionController extends ChangeNotifier {
   final CameraController _camera;
 
   final OrientationTracker _tracker = OrientationTracker();
+
+  /// Dart port of the original app's native OrientationAngle module —
+  /// camera-pose euler angles with ±25° yaw-jump clamping and a 0.8
+  /// low-pass filter, feeding the dot director exactly like the original.
+  final OriginalOrientationFilter originalFilter = OriginalOrientationFilter();
   EquirectStitcher? _stitcher;
   CoverageTracker? _coverage;
   FrameProjector? _projector;
@@ -71,6 +83,11 @@ class CaptureSessionController extends ChangeNotifier {
   /// Result of the last finished session.
   Photosphere? result;
 
+  /// Current step of the finishing pipeline (1–4), like the original's
+  /// "Stitching... Step X/4" progress.
+  int processingStep = 0;
+  static const int processingStepCount = 4;
+
   StreamSubscription<GyroscopeEvent>? _gyroSub;
   StreamSubscription<AccelerometerEvent>? _accelSub;
   StreamSubscription<MagnetometerEvent>? _magSub;
@@ -87,7 +104,9 @@ class CaptureSessionController extends ChangeNotifier {
       result = null;
       capturedFrames = 0;
       previewImage = null;
+      processingStep = 0;
       _tracker.reset();
+      originalFilter.reset();
       _angVelDegPerSec = null;
       _queuedDotId = -1;
       _stitcher = EquirectStitcher(
@@ -135,6 +154,7 @@ class CaptureSessionController extends ChangeNotifier {
     if (dt <= 0 || dt > 0.5) return;
     _tracker.updateGyro(dt, e.x, e.y, e.z);
     orientation = _tracker.value;
+    final (origYaw, origPitch, origRoll) = originalFilter.update(orientation);
 
     // Smoothed angular speed (original: FILTER_ALPHA = 0.5).
     final omegaDeg =
@@ -145,17 +165,15 @@ class CaptureSessionController extends ChangeNotifier {
 
     _updateGap();
 
-    // Dot-target guidance while capturing.
+    // Dot-target guidance while capturing — driven by the original
+    // OrientationAngle-module angles (pitch−90 convention, filtered).
     if (phase == CapturePhase.capturing) {
       final d = director;
       if (d != null) {
-        final (h, elev) = orientation.cameraAim;
-        final up = orientation.rotateInverse(const Vector3(0, 0, 1));
-        final rollDeg = math.atan2(up.x, up.y) * 180 / math.pi;
         final completed = d.update(
-          yawDeg: normalizeAngle(h) * 180 / math.pi,
-          pitchDeg: elev * 180 / math.pi,
-          rollDeg: rollDeg,
+          yawDeg: origYaw,
+          pitchDeg: origPitch,
+          rollDeg: origRoll,
           angularVelocityDegPerSec: _angVelDegPerSec,
         );
         if (completed >= 0) {
@@ -287,10 +305,15 @@ class CaptureSessionController extends ChangeNotifier {
   }
 
   /// Finish the session: finalize the equirect image and store the sphere.
+  ///
+  /// Reports progress through the same four steps the original's processing
+  /// screen shows ("Stitching... Step X/4" → "Finishing... Step 4/4"):
+  /// composite → encode (+ XMP) → thumbnail → store.
   Future<void> finish() async {
     stopAutoCapture();
     if (phase != CapturePhase.capturing) return;
     phase = CapturePhase.processing;
+    processingStep = ProcessingStep.composite.index + 1;
     notifyListeners();
 
     try {
@@ -302,8 +325,25 @@ class CaptureSessionController extends ChangeNotifier {
         watermark: settings.watermark,
         watermarkText: settings.watermarkLabel,
       );
-      final jpeg = await FrameUtils.encodeJpeg(image, quality: 90);
+
+      processingStep = ProcessingStep.encode.index + 1;
+      notifyListeners();
+      var jpeg = await FrameUtils.encodeJpeg(image, quality: 90);
+      // Stamp the GPano XMP metadata that makes this a real 360° photo for
+      // Google Photos / Street View (the original's photos carry it too).
+      jpeg = writeGpanoXmp(
+        jpeg,
+        width: image.width,
+        height: image.height,
+        captureSoftware: '360Sphere',
+      );
+
+      processingStep = ProcessingStep.thumbnail.index + 1;
+      notifyListeners();
       final thumb = await FrameUtils.makeThumbnail(image);
+
+      processingStep = ProcessingStep.store.index + 1;
+      notifyListeners();
       result = await repository.save(
         name: '360° ${_timestampLabel()}',
         jpeg: jpeg,
@@ -353,16 +393,4 @@ class CaptureSessionController extends ChangeNotifier {
     _stitcher?.dispose();
     super.dispose();
   }
-}
-
-/// Normalize an angle into [0, 2π).
-double normalizeAngle(double rad) {
-  var r = rad;
-  while (r < 0) {
-    r += 2 * math.pi;
-  }
-  while (r >= 2 * math.pi) {
-    r -= 2 * math.pi;
-  }
-  return r;
 }

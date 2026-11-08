@@ -59,6 +59,7 @@ class SphereRepository {
     required int height,
     required int frameCount,
     required bool watermarked,
+    String description = '',
   }) async {
     final id = 'sp_${DateTime.now().millisecondsSinceEpoch}_${_randSuffix()}';
     final imageFile = File('${spheresDir.path}/$id.jpg');
@@ -74,6 +75,7 @@ class SphereRepository {
       width: width,
       height: height,
       frameCount: frameCount,
+      description: description,
       watermarked: watermarked,
     );
 
@@ -90,6 +92,22 @@ class SphereRepository {
 
   Future<void> rename(Photosphere sphere, String newName) async {
     sphere.name = newName;
+    final all = await list();
+    for (var i = 0; i < all.length; i++) {
+      if (all[i].id == sphere.id) all[i] = sphere;
+    }
+    await _writeIndex(all);
+  }
+
+  /// Persist name + description edits (the original's PhotoNameScreen
+  /// saves both fields together).
+  Future<void> updateDetails(
+    Photosphere sphere, {
+    required String name,
+    required String description,
+  }) async {
+    sphere.name = name;
+    sphere.description = description;
     final all = await list();
     for (var i = 0; i < all.length; i++) {
       if (all[i].id == sphere.id) all[i] = sphere;

@@ -33,12 +33,17 @@ class Photosphere {
     required this.width,
     required this.height,
     required this.frameCount,
+    this.description = '',
     this.watermarked = false,
     this.streetViewPhotoId,
   });
 
   final String id;
   String name;
+
+  /// Free-form note attached to the photo (the original's PhotoNameScreen
+  /// collects name + description; name is capped at 200 characters there).
+  String description;
   final DateTime createdAt;
 
   /// File name of the equirectangular JPEG inside the app's sphere store.
@@ -60,6 +65,7 @@ class Photosphere {
         width: json['width'] as int? ?? 0,
         height: json['height'] as int? ?? 0,
         frameCount: json['frameCount'] as int? ?? 0,
+        description: json['description'] as String? ?? '',
         watermarked: json['watermarked'] as bool? ?? false,
         streetViewPhotoId: json['streetViewPhotoId'] as String?,
       );
@@ -72,6 +78,7 @@ class Photosphere {
         'width': width,
         'height': height,
         'frameCount': frameCount,
+        'description': description,
         'watermarked': watermarked,
         'streetViewPhotoId': streetViewPhotoId,
       };

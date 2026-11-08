@@ -2,6 +2,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/models.dart';
 import '../core/settings.dart';
@@ -26,12 +27,27 @@ class _CameraScreenState extends State<CameraScreen>
   CaptureSessionController? _session;
   String? _cameraError;
 
+  /// Whether the first-run capture instructions overlay is showing (the
+  /// original app shows "Plant your feet and rotate in one spot." / "Stand
+  /// 3-4 feet away from nearby objects or surfaces." over the camera).
+  bool _showInstructions = false;
+
+  static const _instructionsSeenKey = 'capture_instructions_seen';
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+    _maybeShowInstructions();
     _initCamera();
+  }
+
+  Future<void> _maybeShowInstructions() async {
+    final prefs = await SharedPreferences.getInstance();
+    final seen = prefs.getBool(_instructionsSeenKey) ?? false;
+    if (seen) return;
+    if (mounted) setState(() => _showInstructions = true);
   }
 
   Future<void> _initCamera() async {
@@ -179,6 +195,17 @@ class _CameraScreenState extends State<CameraScreen>
 
             // Processing / done overlay.
             _ProcessingOverlay(session: session),
+
+            // First-run capture instructions (the original's onboarding
+            // texts over the camera preview).
+            if (_showInstructions)
+              _InstructionsOverlay(
+                onDismiss: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool(_instructionsSeenKey, true);
+                  if (mounted) setState(() => _showInstructions = false);
+                },
+              ),
           ],
         ),
       ),
@@ -393,24 +420,126 @@ class _ProcessingOverlay extends StatelessWidget {
         if (session.phase != CapturePhase.processing) {
           return const SizedBox.shrink();
         }
+
+        // The original's processing card: photo thumbnail + "Stitching...
+        // Step X/4" (last step "Finishing... Step 4/4").
+        const stepCount = CaptureSessionController.processingStepCount;
+        final step = session.processingStep.clamp(1, stepCount);
+        final isLast = step >= stepCount;
+        final label =
+            '${isLast ? 'Finishing' : 'Stitching'}… Step $step/$stepCount';
+        final preview = session.previewImage;
+
         return Container(
           color: Colors.black.withValues(alpha: 0.75),
-          child: const Center(
+          child: Center(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                CircularProgressIndicator(color: AppTheme.accent),
-                SizedBox(height: 20),
-                Text('Stitching…',
-                    style: TextStyle(
-                        fontFamily: 'Montserrat',
-                        fontSize: 18,
-                        fontWeight: FontWeight.w600)),
+                if (preview != null)
+                  Container(
+                    width: 220,
+                    height: 110,
+                    margin: const EdgeInsets.only(bottom: 20),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.white24),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: RawImage(
+                      image: preview,
+                      fit: BoxFit.cover,
+                    ),
+                  )
+                else
+                  const Padding(
+                    padding: EdgeInsets.only(bottom: 20),
+                    child: CircularProgressIndicator(color: AppTheme.accent),
+                  ),
+                Text(
+                  label,
+                  style: const TextStyle(
+                      fontFamily: 'Montserrat',
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: 220,
+                  child: LinearProgressIndicator(
+                    value: step / stepCount,
+                    color: AppTheme.accent,
+                    backgroundColor: Colors.white12,
+                    minHeight: 4,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ],
             ),
           ),
         );
       },
+    );
+  }
+}
+
+/// First-run instructions over the camera preview, porting the original
+/// app's two onboarding hints ("Plant your feet and rotate in one spot.",
+/// "Stand 3-4 feet away from nearby objects or surfaces.").
+class _InstructionsOverlay extends StatelessWidget {
+  const _InstructionsOverlay({required this.onDismiss});
+
+  final Future<void> Function() onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    Widget hint(IconData icon, String text) => Row(
+          children: [
+            Icon(icon, color: AppTheme.accent, size: 30),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(fontSize: 15, height: 1.4),
+              ),
+            ),
+          ],
+        );
+
+    return Container(
+      color: Colors.black.withValues(alpha: 0.82),
+      padding: const EdgeInsets.all(28),
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Icon(Icons.panorama_photosphere,
+                size: 64, color: AppTheme.accent),
+            const SizedBox(height: 18),
+            const Text(
+              'Before you start',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                  fontFamily: 'Montserrat',
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700),
+            ),
+            const SizedBox(height: 24),
+            hint(Icons.directions_walk,
+                'Plant your feet and rotate in one spot.'),
+            const SizedBox(height: 16),
+            hint(Icons.straighten,
+                'Stand 3–4 feet away from nearby objects and surfaces.'),
+            const SizedBox(height: 32),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: AppTheme.accent),
+              onPressed: () => onDismiss(),
+              child: const Text('Got it'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

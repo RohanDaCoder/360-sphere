@@ -125,6 +125,14 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
             _metaLine(sphere),
             style: const TextStyle(color: Colors.white54, fontSize: 12),
           ),
+          if (sphere.description.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(
+              sphere.description,
+              style: const TextStyle(
+                  color: Colors.white70, fontSize: 13, height: 1.4),
+            ),
+          ],
           const SizedBox(height: 16),
           FilledButton.icon(
             onPressed: () => Navigator.of(context).push(MaterialPageRoute(
@@ -207,27 +215,77 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
 
   Future<void> _rename(BuildContext context, Photosphere sphere) async {
     final repo = context.read<SphereRepository>();
-    final controller = TextEditingController(text: sphere.name);
-    final name = await showDialog<String>(
+    final nameController = TextEditingController(text: sphere.name);
+    final descController = TextEditingController(text: sphere.description);
+
+    final result = await showDialog<(String, String)>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: AppTheme.surface,
-        title: const Text('Rename', style: TextStyle(fontFamily: 'Montserrat')),
-        content: TextField(controller: controller, autofocus: true),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          String? nameError;
+          void submit() {
+            if (nameController.text.trim().isEmpty) {
+              setDialogState(() => nameError = "Photo name can't be empty");
+              return;
+            }
+            Navigator.pop(context, (
+              nameController.text.trim(),
+              descController.text.trim(),
+            ));
+          }
+
+          return AlertDialog(
+            backgroundColor: AppTheme.surface,
+            title: const Text('Photo details',
+                style: TextStyle(fontFamily: 'Montserrat')),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  maxLength: 200,
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    labelText: 'Photo name',
+                    errorText: nameError,
+                  ),
+                  onChanged: (_) {
+                    if (nameError != null) {
+                      setDialogState(() => nameError = null);
+                    }
+                  },
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: descController,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Photo description',
+                    alignLabelWithHint: true,
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Cancel'),
+              ),
+              FilledButton(
+                onPressed: submit,
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        },
       ),
     );
-    if (name != null && name.isNotEmpty) {
-      await repo.rename(sphere, name);
+    if (result != null) {
+      await repo.updateDetails(
+        sphere,
+        name: result.$1,
+        description: result.$2,
+      );
       if (mounted) _load();
     }
   }

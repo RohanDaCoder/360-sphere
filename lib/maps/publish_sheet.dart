@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../core/theme.dart';
 import 'google_auth_service.dart';
+import 'streetview_errors.dart';
 import 'streetview_publish_service.dart';
 
 /// Bottom sheet that publishes a photosphere to Google Street View / Maps.
@@ -48,6 +49,7 @@ class _PublishSheetState extends State<_PublishSheet> {
   double _heading = 0;
 
   _PublishPhase _phase = _PublishPhase.form;
+  String? _errorTitle;
   String? _error;
   String? _photoId;
 
@@ -89,6 +91,7 @@ class _PublishSheetState extends State<_PublishSheet> {
     setState(() {
       _phase = _PublishPhase.signingIn;
       _error = null;
+      _errorTitle = null;
     });
     try {
       final account = await _auth.signIn();
@@ -102,6 +105,19 @@ class _PublishSheetState extends State<_PublishSheet> {
 
       setState(() => _phase = _PublishPhase.uploading);
       final bytes = await File(widget.imagePath).readAsBytes();
+
+      // Pre-flight: Google rejects photos without 360° metadata with its
+      // "Not a 360° Photo" error — catch it before uploading (the original
+      // app maps the same server response to an alert dialog).
+      final preflight = preflightCheck(bytes);
+      if (preflight != null) {
+        setState(() {
+          _phase = _PublishPhase.error;
+          _errorTitle = preflight.title;
+          _error = preflight.message;
+        });
+        return;
+      }
 
       final uploadUrl = await _api.startUpload();
       await _api.uploadBytes(uploadUrl, bytes);
@@ -121,15 +137,15 @@ class _PublishSheetState extends State<_PublishSheet> {
         _phase = _PublishPhase.error;
         _error = e.message;
       });
-    } on StreetViewException catch (e) {
-      setState(() {
-        _phase = _PublishPhase.error;
-        _error = e.message;
-      });
     } catch (e) {
+      // Classify like the original's alert mapping (Location Required /
+      // Photo Too Large / Already Uploaded / Connection Error / Not a 360°
+      // Photo / Token Expired / Permission Required / Upload Failed).
+      final sv = classifyStreetViewError(e);
       setState(() {
         _phase = _PublishPhase.error;
-        _error = '$e';
+        _errorTitle = sv.title;
+        _error = sv.message;
       });
     }
   }
@@ -228,6 +244,14 @@ class _PublishSheetState extends State<_PublishSheet> {
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
+              if (_errorTitle != null)
+                Text(
+                  _errorTitle!,
+                  style: const TextStyle(
+                      color: AppTheme.warn,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700),
+                ),
               Text(
                 _error!,
                 style: const TextStyle(

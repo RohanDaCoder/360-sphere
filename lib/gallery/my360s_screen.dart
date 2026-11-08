@@ -1,12 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 
+import '../capture/stitching/frame_utils.dart';
+import '../capture/stitching/xmp_pano.dart';
 import '../core/models.dart';
 import '../core/sphere_repository.dart';
 import '../core/theme.dart';
 import '../capture/camera_screen.dart';
+import 'import_service.dart';
 import 'sphere_detail_screen.dart';
 
 /// "My 360s" — the gallery grid of captured photospheres.
@@ -32,12 +36,93 @@ class _My360sScreenState extends State<My360sScreen> {
     });
   }
 
+  bool _importing = false;
+
+  /// Import an existing 360° photo from the device gallery — the original
+  /// app's Import button (validated with its "Not a 360° Photo" check:
+  /// GPano metadata or a 2:1 equirectangular ratio).
+  Future<void> _import() async {
+    if (_importing) return;
+    final repo = context.read<SphereRepository>();
+    setState(() => _importing = true);
+    try {
+      final picked = await ImagePicker().pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 100,
+      );
+      if (picked == null) return;
+      final bytes = await readFileBytes(picked.path);
+      final check = validateForImport(bytes);
+      if (check is ImportRejected) {
+        _toast(check.reason);
+        return;
+      }
+      final ok = check as ImportOk;
+
+      // Stamp GPano metadata if the source photo lacks it, so imported
+      // photos work with Street View / Google Photos like captured ones.
+      var jpeg = bytes;
+      if (!hasGpanoXmp(bytes)) {
+        jpeg = writeGpanoXmp(
+          bytes,
+          width: ok.width,
+          height: ok.height,
+          captureSoftware: '360Sphere (imported)',
+        );
+      }
+
+      final image = await FrameUtils.decodeJpeg(jpeg, maxLongEdge: 4096);
+      final thumb = await FrameUtils.makeThumbnail(image);
+
+      final sphere = await repo.save(
+        name: 'Imported Photo ${_timestampLabel()}',
+        jpeg: jpeg,
+        thumb: thumb,
+        width: ok.width,
+        height: ok.height,
+        frameCount: 1,
+        watermarked: false,
+      );
+      if (mounted) {
+        _toast('Imported "${sphere.name}"');
+        _reload();
+      }
+    } catch (e) {
+      _toast('Failed to import file: $e');
+    } finally {
+      if (mounted) setState(() => _importing = false);
+    }
+  }
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  String _timestampLabel() {
+    final n = DateTime.now();
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${n.year}${two(n.month)}${two(n.day)} ${two(n.hour)}${two(n.minute)}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('My 360s'),
         actions: [
+          IconButton(
+            onPressed: _importing ? null : _import,
+            icon: _importing
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.download),
+            tooltip: 'Import a 360° photo',
+          ),
           IconButton(
             onPressed: _reload,
             icon: const Icon(Icons.refresh),
