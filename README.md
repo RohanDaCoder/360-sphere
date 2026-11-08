@@ -14,27 +14,36 @@ equirectangular photo you can view immersively, share, and publish.
 
 ## Features
 
-- 📷 **Gyro-guided capture** — live coverage ring, next-gap arrow, auto-sweep
-  or manual shutter; photosphere (full sphere) and horizontal panorama modes.
+- 🎯 **Dot-target guided capture** — the original app's capture mechanic,
+  ported from its decompiled `useCaptureWorklet`: a 33-dot sphere layout
+  (13 equator / 9 top / 9 bottom / ceiling / floor; 30 for wide lenses),
+  hold-to-capture (aim within 3°, < 5°/s, 400 ms → auto shutter),
+  pitch-weighted target selection, sticky targets, polar-last ordering and
+  an optional floor dot.
+- 📷 **Five capture modes** — photosphere + horizontal / vertical /
+  wide-angle / fisheye panoramas, matching the original's mode set; the
+  fisheye mode warps through an equidistant lens model.
 - 🧵 **Skia mesh-warp stitching** — camera frames are warped onto the
   equirectangular projection through a per-vertex feathered textured mesh
   (`Canvas.drawVertices`), the same offscreen-texture technique the original
   React Native app implements with Shopify Skia worklets.
 - 🖼️ **Immersive viewer** — Photo Sphere Viewer + three.js (vendored), with
-  autorotate and gyroscope support.
+  Play (autorotate), gyroscope, share, save and delete actions.
 - 🗺️ **Publish to Google Maps** — full Street View Publish API flow
   (sign-in, upload, geo-pose). See [docs/GOOGLE-MAPS-UPLOAD.md](docs/GOOGLE-MAPS-UPLOAD.md).
 - 🔗 **Share & save** — share the equirect image anywhere; save to the
   gallery.
-- ⚙️ **Calibration settings** — output resolution, camera FOV, watermark,
-  compass assist, frame-rotation fix.
+- ✍️ **Author watermark** — "Created in 360Sphere by {author}", following
+  the original's watermark pattern.
+- ⚙️ **Calibration settings** — output resolution, camera FOV (40–180°),
+  floor-dot capture, watermark author, compass assist, frame-rotation fix.
 
 ## Getting started
 
 ```bash
 flutter pub get
 flutter run          # on an Android device (camera + sensors required)
-flutter test         # 34 unit tests: fusion, projection, mesh, EXIF
+flutter test         # 53 unit tests: dots, hold-to-capture, fusion, projection, mesh, EXIF
 flutter build apk    # release APK
 ```
 
@@ -88,8 +97,12 @@ lib/
   core/                         theme, models, settings, repository
   capture/
     orientation/                quaternion math + sensor fusion
-    stitching/                  equirect projection, mesh warp, EXIF, codec
-    widgets/                    capture HUD (coverage ring, reticle, arrows)
+    dots/                       dot layouts + hold-to-capture director
+                                (port of the original capture worklet)
+    stitching/                  equirect projection (pinhole + fisheye),
+                                mesh warp, EXIF, codec
+    widgets/                    capture HUD (green targets, hold ring,
+                                arrow, outlines, coverage ring)
     camera_screen.dart          capture UI + session orchestration
   gallery/                      My360s grid + sphere detail (actions)
   viewer/                       PSV WebView bridge + fullscreen viewer
@@ -99,6 +112,7 @@ lib/
 assets/viewer/                  clean-room PSV page + vendored runtime
 docs/
   REA-ANALYSIS.md               reverse-engineering findings (evidence-based)
+  REVISION.md                   original-vs-recreation gap matrix
   ARCHITECTURE.md               original vs recreation, stitching math
   GOOGLE-MAPS-UPLOAD.md         Street View publishing + OAuth setup
 ```
@@ -108,8 +122,11 @@ docs/
 - **[REA-ANALYSIS.md](docs/REA-ANALYSIS.md)** — what the original APK is made
   of (React Native/Hermes/vision-camera/Skia stack, screens, API surface,
   monetization), with evidence.
+- **[REVISION.md](docs/REVISION.md)** — feature-by-feature gap matrix between
+  the original and this recreation, with port/skip decisions and evidence.
 - **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** — how the stitching engine
-  works: quaternion fusion, pinhole→equirect mesh warping, seam handling.
+  works: quaternion fusion, pinhole→equirect mesh warping, fisheye lens
+  model, seam handling.
 - **[GOOGLE-MAPS-UPLOAD.md](docs/GOOGLE-MAPS-UPLOAD.md)** — one-time OAuth
   setup for Street View publishing.
 

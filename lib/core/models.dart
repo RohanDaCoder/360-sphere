@@ -2,19 +2,25 @@
 library;
 
 /// Capture mode, mirroring the mode set offered by the original app
-/// (panorama horizontal / vertical / wide-angle / fisheye + photosphere).
-///
-/// The recreation implements the two modes that drive the core pipeline:
-/// the full-sphere photosphere and the single-row horizontal panorama.
+/// (panorama horizontal / vertical / wide-angle / fisheye + photosphere —
+/// mode names recovered from the bundle's string table).
 enum CaptureMode {
   photosphere('360° Photosphere'),
-  panoramaHorizontal('Panorama (horizontal)');
+  panoramaHorizontal('Panorama (horizontal)'),
+  panoramaVertical('Panorama (vertical)'),
+  panoramaWideAngle('Panorama (wide-angle)'),
+  panoramaFisheye('Panorama (fisheye)');
 
   const CaptureMode(this.label);
   final String label;
 
   /// Whether this mode expects full-sphere coverage (pitch sweep included).
   bool get wantsFullSphere => this == CaptureMode.photosphere;
+
+  /// Whether frames come from an equidistant fisheye lens (≈180°) instead of
+  /// a regular rectilinear camera — changes the warp model in
+  /// [FrameCamera].
+  bool get usesFisheyeLens => this == CaptureMode.panoramaFisheye;
 }
 
 /// A captured and stitched 360° photo ("photosphere").

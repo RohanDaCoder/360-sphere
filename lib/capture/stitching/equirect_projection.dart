@@ -57,22 +57,37 @@ abstract final class Equirect {
   }
 }
 
-/// Pinhole camera model for one captured frame.
+/// Lens projection model of the capture camera.
+enum ProjectionModel {
+  /// Regular rectilinear (pinhole) camera — u ∝ tan(angle).
+  pinhole,
+
+  /// Equidistant fisheye — image radius ∝ angle from the optical axis
+  /// (the lens attachment the original app's "fisheye" panorama mode
+  /// targets).
+  fisheye,
+}
+
+/// Pinhole or fisheye camera model for one captured frame.
 ///
 /// The frame is an "upright portrait" image: after our EXIF handling, the
 /// image x-axis follows device +X and the image y-axis (downwards) follows
 /// device −Y. The back camera optical axis is device −Z.
 class FrameCamera {
-  FrameCamera(
-      {required this.fovHDeg,
-      required this.imageWidth,
-      required this.imageHeight})
-      : fovH = fovHDeg * math.pi / 180,
+  FrameCamera({
+    required this.fovHDeg,
+    required this.imageWidth,
+    required this.imageHeight,
+    this.projection = ProjectionModel.pinhole,
+  })  : fovH = fovHDeg * math.pi / 180,
         aspect = imageWidth / imageHeight;
 
   final double fovHDeg;
   final int imageWidth;
   final int imageHeight;
+
+  /// Lens projection used by [projectDevice].
+  final ProjectionModel projection;
 
   final double fovH;
   final double aspect;
@@ -82,10 +97,13 @@ class FrameCamera {
   double get fovV => 2 * math.atan(tanHalfFovV);
 
   /// Diagonal field of view (bounding angular radius ≈ diagonal / 2).
-  double get diagonalFov =>
-      2 *
-      math.atan(
-          math.sqrt(tanHalfFovH * tanHalfFovH + tanHalfFovV * tanHalfFovV));
+  /// For fisheye lenses [fovHDeg] is the *diagonal* (full-circle) FOV, so it
+  /// is used directly.
+  double get diagonalFov => projection == ProjectionModel.fisheye
+      ? fovH
+      : 2 *
+          math.atan(
+              math.sqrt(tanHalfFovH * tanHalfFovH + tanHalfFovV * tanHalfFovV));
 
   /// Camera forward axis in device frame.
   static const Vector3 forward = Vector3(0, 0, -1);
@@ -94,7 +112,32 @@ class FrameCamera {
   ///
   /// Returns `(u, v)` with u,v ∈ [-1, 1] (image center at 0) or `null` when
   /// the direction is behind the camera / outside the frustum margin.
+  ///
+  /// * pinhole: u = x/z / tan(fovH/2), v = −y/z / tan(fovV/2)
+  /// * fisheye (equidistant): image radius r = θ / (diagonalFov/2) with θ
+  ///   the angle to the optical axis; u,v keep the direction's x/−y
+  ///   proportions.
   (double, double)? projectDevice(Vector3 dirDevice, {double margin = 0.0}) {
+    if (projection == ProjectionModel.fisheye) {
+      final len = dirDevice.length;
+      if (len < 1e-9) return null;
+      final n =
+          Vector3(dirDevice.x / len, dirDevice.y / len, dirDevice.z / len);
+      final cosTheta = -n.z; // dot with forward (0, 0, -1)
+      // Strictly behind the lens is out; directions in the lens plane
+      // (theta = 90°) are the rim of a 180° fisheye and stay valid.
+      if (cosTheta < 0) return null;
+      final theta = math.acos(cosTheta.clamp(-1.0, 1.0));
+      final maxR = diagonalFov / 2;
+      if (theta > maxR * (1 + margin)) return null;
+      final rNorm = theta / maxR;
+      final horiz = math.sqrt(n.x * n.x + n.y * n.y);
+      if (horiz < 1e-9) return (0, 0);
+      final u = n.x / horiz * rNorm;
+      final v = -n.y / horiz * rNorm;
+      if (u.abs() > 1 + margin || v.abs() > 1 + margin) return null;
+      return (u, v);
+    }
     final zc = -dirDevice.z; // depth along optical axis
     if (zc <= 1e-9) return null;
     final u = dirDevice.x / zc / tanHalfFovH;

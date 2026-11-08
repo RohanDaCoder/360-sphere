@@ -190,7 +190,13 @@ class EquirectStitcher {
   }
 
   /// Final accumulated image, optionally stamped with a signature.
-  Future<ui.Image> finalize({bool watermark = false}) async {
+  ///
+  /// [watermarkText] follows the original app's pattern —
+  /// "Created in 360 Photo Cam by {author}" — adapted to this app.
+  Future<ui.Image> finalize({
+    bool watermark = false,
+    String watermarkText = '360sphere',
+  }) async {
     if (_accumulated == null) {
       final recorder = ui.PictureRecorder();
       final canvas = ui.Canvas(recorder,
@@ -210,10 +216,9 @@ class EquirectStitcher {
         recorder, ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()));
     canvas.drawImage(_accumulated!, ui.Offset.zero, Paint());
 
-    const label = '360sphere';
     final tp = TextPainter(
-      text: const TextSpan(
-        text: label,
+      text: TextSpan(
+        text: watermarkText,
         style: TextStyle(
           color: ui.Color(0xB3FFFFFF),
           fontSize: 44,

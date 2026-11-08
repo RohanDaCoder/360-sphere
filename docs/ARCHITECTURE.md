@@ -60,12 +60,16 @@ expresses it with Flutter's own rendering engine (Impeller/Skia) via
 Equirect mapping: `λ = atan2(d.x, d.y)`, `φ = asin(d.z)`,
 `x = (λ+π)/2π·W`, `y = (π/2−φ)/π·H` on a 2:1 canvas (4096×2048 default).
 
-Each frame is a pinhole camera (`fovH` from settings, ~62° default). For a
+Each frame is a pinhole camera (`fovH` from settings, ~62° default) — or,
+in the fisheye mode, an **equidistant fisheye** (`ProjectionModel.fisheye`:
+image radius r = θ / (diagonal FOV/2), where θ is the angle from the
+optical axis; the configured FOV is the lens's full-circle diagonal). For a
 mesh grid over the frame's spherical footprint, every vertex:
 
 1. converts its equirect (λ, φ) to a world direction,
 2. rotates it into the device frame with `q⁻¹`,
-3. projects it through the pinhole to frame texture coordinates (u, v),
+3. projects it through the pinhole (or fisheye) model to frame texture
+   coordinates (u, v),
 4. keeps per-vertex **alpha** that feathers from 1 inside the frustum to 0
    across a ~6° border ring.
 
@@ -84,19 +88,41 @@ positions are computed in *unwrapped* longitude, so a frame spanning the
 mesh again translated by ±W so the wrapped half lands on the opposite edge.
 
 Coverage is tracked in 36×18 lon/lat bins (panorama mode: middle band only),
-driving the HUD ring and the amber "next gap" arrow.
+driving the HUD ring.
+
+### Dot-target guidance (ported from the original capture worklet)
+
+`lib/capture/dots/` — the original app's `useCaptureWorklet`, recovered from
+the Hermes bundle, drives capture through a dot layout: 33 dots for a
+photosphere (13 equator / 9 top @ ±45° / 9 bottom / ceiling / floor; 30 when
+the camera FOV > 82°), one row/column per panorama mode, 3 × 120° + poles for
+the fisheye mode. The `DotCaptureDirector` ports the worklet's semantics:
+
+- target selection: sticky previous target, else nearest by
+  `(0.2·|Δpitch|)² + |Δyaw|²` — pitch moves are cheap, so the guidance
+  naturally row-jumps; polar dots only after all normal dots; the floor dot
+  only when enabled;
+- hold-to-capture: aim within 3° (pitch, yaw and roll), angular velocity
+  under 5°/s, held 400 ms → the frame fires automatically
+  (`NOT_CAPTURED → HOLDING → CAPTURING → CAPTURED`);
+- when every dot is captured the session stitches itself.
 
 ## Capture flow
 
 `lib/capture/capture_session_controller.dart`
 
-1. `start()` — camera preview + sensor subscriptions; tracker reset.
-2. Auto sweep (`startAutoCapture`, ~0.8 s cadence) or manual shutter; each
-   frame: orientation snapshot → `takePicture` → EXIF-aware decode (own
-   mini EXIF orientation parser, aspect-heuristic fallback + manual override
-   setting) → mesh warp into the accumulator.
-3. `finish()` — optional watermark stamp → JPEG (quality 90) → repository
-   (image + 512px thumbnail + `index.json`).
+1. `start()` — camera preview + sensor subscriptions; tracker reset; dot
+   layout + director built for the selected mode.
+2. **Hold-to-capture** (the original's mechanic): the director watches the
+   gyro-derived aim; holding 400 ms on a target dot fires the shutter
+   automatically. Manual shutter (and a legacy auto-timer API) remain as
+   fallbacks. Each frame: orientation snapshot → `takePicture` → EXIF-aware
+   decode (own mini EXIF orientation parser, aspect-heuristic fallback +
+   manual override setting) → mesh warp into the accumulator; the dot is
+   marked captured on success.
+3. When every dot is captured — or the user taps ✓ — `finish()`: optional
+   author watermark → JPEG (quality 90) → repository (image + 512px
+   thumbnail + `index.json`).
 
 Differences from the original, by design (documented honestly):
 still shots instead of a continuous frame stream; complementary filter
@@ -119,8 +145,9 @@ by Google Sign-In with the `streetviewpublish` scope. See
 
 ## Testing
 
-34 unit tests cover the entire math core — quaternion algebra and camera-aim
+53 unit tests cover the entire math core — quaternion algebra and camera-aim
 extraction, gyro/accel/mag fusion convergence, equirect round-trips, pinhole
-projection, mesh building (aim-centering, seam crossing, uv clamping,
-triangle expansion), coverage binning, and the EXIF orientation parser
+and fisheye projection, mesh building (aim-centering, seam crossing, uv
+clamping, triangle expansion), coverage binning, dot layouts and the
+hold-to-capture director, and the EXIF orientation parser
 (little/big endian). Run: `flutter test`.

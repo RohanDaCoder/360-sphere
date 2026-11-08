@@ -102,6 +102,14 @@
         } catch (e) { post('error:' + e.message); }
       };
 
+      window.setAutorotate = function (enabled) {
+        if (!viewer) return;
+        try {
+          var ar = viewer.getPlugin(PhotoSphereViewer.AutorotatePlugin);
+          if (ar) { enabled ? ar.start() : ar.stop(); }
+        } catch (e) { post('error:' + e.message); }
+      };
+
       post('ready');
     })();
   </script>

@@ -81,6 +81,12 @@ class PsvBridge {
     await _controller?.runJavaScript('window.setGyro($enabled)');
   }
 
+  /// Toggle the autorotate ("Play") plugin — the original viewer's
+  /// Play button.
+  Future<void> setAutorotate(bool enabled) async {
+    await _controller?.runJavaScript('window.setAutorotate($enabled)');
+  }
+
   static String _escape(String js) =>
       js.replaceAll(r'\', r'\\').replaceAll('"', r'\"').replaceAll("'", r"\'");
 }

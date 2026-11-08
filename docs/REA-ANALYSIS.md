@@ -86,15 +86,17 @@ AWS S3 presigned uploads power photo storage; short links power sharing.
 
 | Original feature | Recreation |
 | --- | --- |
-| Camera sweep with gyro guidance | ✅ still-shot sweep + quaternion HUD (coverage ring, next-gap arrow) |
+| Dot-target capture (33/30-dot sphere layout, hold-to-capture 3°/5°/s/400 ms) | ✅ semantics port of the `useCaptureWorklet` (`lib/capture/dots/`) |
+| Capture modes (photosphere + horizontal / vertical / wide-angle / fisheye panoramas) | ✅ all five, incl. equidistant fisheye projection |
+| Camera sweep with gyro guidance | ✅ quaternion HUD (green targets, hold ring, arrow, coverage ring) |
 | Skia offscreen-texture stitching | ✅ `Canvas.drawVertices` textured mesh onto an equirect canvas (same Skia engine that Flutter renders with) |
-| Stitching pass after capture | ✅ finalize + JPEG encode |
+| Stitching pass after capture | ✅ finalize + JPEG encode (auto-finishes when all dots are captured) |
 | My360s gallery | ✅ local file store + grid |
-| 360° viewer (PSV + three.js) | ✅ same runtime, vendored, streamed via base64 bridge |
+| 360° viewer (PSV + three.js) | ✅ same runtime, vendored, streamed via base64 bridge; Play/autorotate, gyroscope, share, save, delete |
 | Share | ✅ file share (no backend, so no hosted viewer link) |
 | **Publish to Google Maps / Street View** | ✅ Street View Publish API v1 (see docs/GOOGLE-MAPS-UPLOAD.md) |
-| Watermark | ✅ optional signature stamp |
-| Auth / community / billing / push | ❌ out of scope (core pipeline) — endpoints documented above for a future backend |
+| Watermark "Created in … by {author}" | ✅ author-name watermark setting |
+| Auth / community / billing / push | ❌ out of scope (core pipeline) — endpoints documented above for a future backend; see [REVISION.md](REVISION.md) for the full gap matrix |
 
 ## Legal note
 

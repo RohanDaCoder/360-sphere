@@ -200,16 +200,24 @@ class _TopBar extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         child: Row(
           children: [
-            for (final m in CaptureMode.values)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ChoiceChip(
-                  label: Text(m.label),
-                  selected: session.mode == m,
-                  onSelected: (_) => onModeChanged(m),
+            Expanded(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    for (final m in CaptureMode.values)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: ChoiceChip(
+                          label: Text(m.label),
+                          selected: session.mode == m,
+                          onSelected: (_) => onModeChanged(m),
+                        ),
+                      ),
+                  ],
                 ),
               ),
-            const Spacer(),
+            ),
             if (session.phase == CapturePhase.capturing)
               _CoverageBadge(session: session),
           ],
@@ -227,6 +235,9 @@ class _CoverageBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final pct = (session.coverageFraction * 100).round();
+    final dots = session.dotTotal > 0
+        ? '${session.dotCaptured}/${session.dotTotal}'
+        : null;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -236,6 +247,11 @@ class _CoverageBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (dots != null)
+            Text(dots,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w700, color: AppTheme.ok)),
+          if (dots != null) const SizedBox(width: 6),
           Text('$pct%', style: const TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(width: 6),
           const Icon(Icons.track_changes, size: 16, color: AppTheme.warn),
@@ -298,7 +314,7 @@ class _BottomControls extends StatelessWidget {
                 IconButton(
                   onPressed: () async {
                     if (session.phase == CapturePhase.previewing) {
-                      await session.startAutoCapture();
+                      await session.toggleCapture();
                     } else if (session.phase == CapturePhase.capturing) {
                       await session.finish();
                     }
@@ -308,7 +324,8 @@ class _BottomControls extends StatelessWidget {
                     color: capturing ? AppTheme.ok : Colors.white,
                     size: 36,
                   ),
-                  tooltip: capturing ? 'Finish & stitch' : 'Start auto sweep',
+                  tooltip:
+                      capturing ? 'Finish & stitch' : 'Start guided capture',
                 ),
               ],
             ),
@@ -338,11 +355,11 @@ class _BottomControls extends StatelessWidget {
                     fontWeight: FontWeight.w700)),
             SizedBox(height: 12),
             Text(
-              '1. Tap ▶ to start the auto sweep (or tap the shutter for manual frames).\n'
-              '2. Hold the phone upright and pivot slowly around yourself.\n'
-              '3. Follow the amber arrow — it points at missing coverage.\n'
-              '4. For full spheres, also tilt up toward the sky and down toward the ground.\n'
-              '5. Tap ✓ when the ring is mostly orange to stitch and save.',
+              '1. Tap ▶ to start — green target dots appear around you.\n'
+              '2. Aim at the highlighted dot and hold steady: an amber ring fills and the shot fires automatically.\n'
+              '3. Follow the amber arrow to the next dot. Ceiling and floor dots come last.\n'
+              '4. You can also tap the shutter to grab a frame manually.\n'
+              '5. When every dot is green the sphere stitches itself — or tap ✓ anytime.',
               style: TextStyle(height: 1.6, color: Colors.white70),
             ),
           ],

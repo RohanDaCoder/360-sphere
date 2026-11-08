@@ -10,6 +10,8 @@ import 'package:sensors_plus/sensors_plus.dart';
 import '../core/models.dart';
 import '../core/settings.dart';
 import '../core/sphere_repository.dart';
+import 'dots/capture_dots.dart';
+import 'dots/dot_capture_director.dart';
 import 'orientation/orientation_tracker.dart';
 import 'orientation/quaternion.dart';
 import 'stitching/equirect_projection.dart';
@@ -22,9 +24,9 @@ enum CapturePhase { idle, previewing, capturing, processing, done, failed }
 /// Orchestrates one photosphere capture:
 /// camera → gyro-oriented frames → Skia equirect stitcher → saved sphere.
 ///
-/// Mirrors the original app's capture flow (camera sweep followed by a
-/// "Stitching" pass), with the difference that frames are periodic still
-/// shots rather than a continuous video stream.
+/// Mirrors the original app's capture flow: a dot-target layout guides the
+/// sweep (hold the phone on each dot to auto-capture, or tap the shutter),
+/// followed by a "Stitching" pass that finalizes the equirect image.
 class CaptureSessionController extends ChangeNotifier {
   CaptureSessionController({
     required this.settings,
@@ -41,6 +43,9 @@ class CaptureSessionController extends ChangeNotifier {
   CoverageTracker? _coverage;
   FrameProjector? _projector;
 
+  /// Dot-target guidance director (the original app's capture worklet).
+  DotCaptureDirector? director;
+
   CaptureMode mode = CaptureMode.photosphere;
   CapturePhase phase = CapturePhase.idle;
   String? error;
@@ -54,9 +59,14 @@ class CaptureSessionController extends ChangeNotifier {
   double get coverageFraction => _coverage?.fraction ?? 0;
   CoverageTracker? get coverage => _coverage;
 
-  /// Next suggested aim (heading, elevation) in radians, for the HUD arrow.
+  /// Next suggested aim (heading, elevation) in radians (fallback guidance
+  /// when no director is active).
   (double, double)? nextGap;
   int capturedFrames = 0;
+
+  /// Session progress across the dot layout.
+  int get dotTotal => director?.dots.length ?? 0;
+  int get dotCaptured => director?.capturedCount ?? 0;
 
   /// Result of the last finished session.
   Photosphere? result;
@@ -67,6 +77,8 @@ class CaptureSessionController extends ChangeNotifier {
   Timer? _autoTimer;
   final Stopwatch _dt = Stopwatch();
   bool _busy = false;
+  double? _angVelDegPerSec;
+  int _queuedDotId = -1;
 
   Future<void> start() async {
     try {
@@ -76,12 +88,23 @@ class CaptureSessionController extends ChangeNotifier {
       capturedFrames = 0;
       previewImage = null;
       _tracker.reset();
+      _angVelDegPerSec = null;
+      _queuedDotId = -1;
       _stitcher = EquirectStitcher(
         width: settings.equirectWidth,
         height: settings.equirectHeight,
       );
       _coverage = CoverageTracker(fullSphere: mode.wantsFullSphere)..reset();
       _projector = FrameProjector();
+      director = (DotCaptureDirector(
+        dots: CaptureDots.layout(
+          mode,
+          cameraFovDeg: settings.cameraFovDegrees,
+          includeFloor: settings.includeFloorCapture,
+        ),
+      ))
+        ..floorEnabled = settings.includeFloorCapture
+        ..reset();
       _dt.reset();
       _dt.start();
 
@@ -112,7 +135,38 @@ class CaptureSessionController extends ChangeNotifier {
     if (dt <= 0 || dt > 0.5) return;
     _tracker.updateGyro(dt, e.x, e.y, e.z);
     orientation = _tracker.value;
+
+    // Smoothed angular speed (original: FILTER_ALPHA = 0.5).
+    final omegaDeg =
+        math.sqrt(e.x * e.x + e.y * e.y + e.z * e.z) * 180 / math.pi;
+    _angVelDegPerSec = _angVelDegPerSec == null
+        ? omegaDeg
+        : 0.5 * _angVelDegPerSec! + 0.5 * omegaDeg;
+
     _updateGap();
+
+    // Dot-target guidance while capturing.
+    if (phase == CapturePhase.capturing) {
+      final d = director;
+      if (d != null) {
+        final (h, elev) = orientation.cameraAim;
+        final up = orientation.rotateInverse(const Vector3(0, 0, 1));
+        final rollDeg = math.atan2(up.x, up.y) * 180 / math.pi;
+        final completed = d.update(
+          yawDeg: normalizeAngle(h) * 180 / math.pi,
+          pitchDeg: elev * 180 / math.pi,
+          rollDeg: rollDeg,
+          angularVelocityDegPerSec: _angVelDegPerSec,
+        );
+        if (completed >= 0) {
+          if (_busy) {
+            _queuedDotId = completed;
+          } else {
+            unawaited(_grabFrame(dotId: completed));
+          }
+        }
+      }
+    }
     notifyListeners();
   }
 
@@ -140,7 +194,8 @@ class CaptureSessionController extends ChangeNotifier {
     }
   }
 
-  /// Manually grab one frame (shutter button).
+  /// Manually grab one frame (shutter button). Captures the current target
+  /// dot when the director is active.
   Future<void> captureFrame() async {
     if (phase != CapturePhase.capturing && phase != CapturePhase.previewing) {
       return;
@@ -149,11 +204,11 @@ class CaptureSessionController extends ChangeNotifier {
       phase = CapturePhase.capturing;
       notifyListeners();
     }
-    await _grabFrame();
+    await _grabFrame(dotId: director?.targetId ?? -1);
   }
 
-  /// Auto-pilot: capture a frame roughly every [interval] while the user
-  /// sweeps the phone around.
+  /// Legacy auto-pilot kept for tests; the dot director's hold-to-capture is
+  /// the primary flow.
   Future<void> startAutoCapture(
       {Duration interval = const Duration(milliseconds: 800)}) async {
     if (phase == CapturePhase.previewing) {
@@ -161,7 +216,8 @@ class CaptureSessionController extends ChangeNotifier {
       notifyListeners();
     }
     _autoTimer?.cancel();
-    _autoTimer = Timer.periodic(interval, (_) => _grabFrame());
+    _autoTimer = Timer.periodic(
+        interval, (_) => _grabFrame(dotId: director?.targetId ?? -1));
   }
 
   void stopAutoCapture() {
@@ -169,7 +225,7 @@ class CaptureSessionController extends ChangeNotifier {
     _autoTimer = null;
   }
 
-  Future<void> _grabFrame() async {
+  Future<void> _grabFrame({int dotId = -1}) async {
     if (_busy || phase != CapturePhase.capturing) return;
     _busy = true;
     try {
@@ -190,6 +246,9 @@ class CaptureSessionController extends ChangeNotifier {
         fovHDeg: settings.cameraFovDegrees,
         imageWidth: frame.width,
         imageHeight: frame.height,
+        projection: mode.usesFisheyeLens
+            ? ProjectionModel.fisheye
+            : ProjectionModel.pinhole,
       );
 
       await _stitcher?.addFrame(
@@ -199,16 +258,31 @@ class CaptureSessionController extends ChangeNotifier {
         projector: _projector,
       );
       _coverage?.markFrame(q, cam);
+      if (dotId >= 0) director?.markCaptured(dotId);
       capturedFrames = _stitcher?.frameCount ?? capturedFrames;
       previewImage = _stitcher?.preview;
       _updateGap();
       notifyListeners();
+
+      // All dots captured → the session finishes itself (the original moves
+      // to its Stitching/PROCESSING state the same way).
+      if (director != null &&
+          director!.allCaptured &&
+          phase == CapturePhase.capturing) {
+        await finish();
+      }
     } on CameraException catch (e) {
       _fail('Camera error: ${e.description ?? e.code}');
     } catch (e) {
       _fail('$e');
     } finally {
       _busy = false;
+      // A hold completed while the camera was busy: take it now.
+      final queued = _queuedDotId;
+      if (queued >= 0 && phase == CapturePhase.capturing) {
+        _queuedDotId = -1;
+        unawaited(_grabFrame(dotId: queued));
+      }
     }
   }
 
@@ -224,7 +298,10 @@ class CaptureSessionController extends ChangeNotifier {
       if (stitcher == null || stitcher.frameCount == 0) {
         throw StateError('No frames captured');
       }
-      final image = await stitcher.finalize(watermark: settings.watermark);
+      final image = await stitcher.finalize(
+        watermark: settings.watermark,
+        watermarkText: settings.watermarkLabel,
+      );
       final jpeg = await FrameUtils.encodeJpeg(image, quality: 90);
       final thumb = await FrameUtils.makeThumbnail(image);
       result = await repository.save(

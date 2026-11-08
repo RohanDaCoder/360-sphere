@@ -131,6 +131,12 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
               builder: (_) => SphereViewerScreen(
                 imagePath: repo.imagePath(sphere),
                 title: sphere.name,
+                onShare: () => ShareService.shareFile(repo.imagePath(sphere)),
+                onSave: () async {
+                  await ShareService.saveToGallery(repo.imagePath(sphere));
+                  _toast('Saved to gallery');
+                },
+                onDelete: () => _confirmDelete(context, sphere),
               ),
             )),
             icon: const Icon(Icons.threed_rotation),
@@ -226,7 +232,8 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
     }
   }
 
-  Future<void> _confirmDelete(BuildContext context, Photosphere sphere) async {
+  /// Returns true when the sphere was deleted.
+  Future<bool> _confirmDelete(BuildContext context, Photosphere sphere) async {
     final repo = context.read<SphereRepository>();
     final yes = await showDialog<bool>(
       context: context,
@@ -248,8 +255,10 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
     );
     if (yes == true) {
       await repo.delete(sphere);
-      if (!mounted) return;
+      if (!mounted) return true;
       Navigator.of(this.context).maybePop();
+      return true;
     }
+    return false;
   }
 }

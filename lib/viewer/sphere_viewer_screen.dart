@@ -5,15 +5,29 @@ import '../core/theme.dart';
 import 'psv_bridge.dart';
 
 /// Fullscreen immersive 360° viewer (Photo Sphere Viewer in a WebView),
-/// matching the original app's viewing experience.
+/// matching the original app's viewing experience: Play (autorotate),
+/// gyroscope, share, download-to-gallery and delete actions.
 class SphereViewerScreen extends StatefulWidget {
-  const SphereViewerScreen({super.key, required this.imagePath, this.title});
+  const SphereViewerScreen({
+    super.key,
+    required this.imagePath,
+    this.title,
+    this.onShare,
+    this.onSave,
+    this.onDelete,
+  });
 
   /// Path to the equirectangular JPEG.
   final String imagePath;
 
   /// Optional caption (sphere name).
   final String? title;
+
+  /// Optional viewer actions (the original exposes Share / Download /
+  /// Delete buttons on its viewer screen). When null the button is hidden.
+  final Future<void> Function()? onShare;
+  final Future<void> Function()? onSave;
+  final Future<bool> Function()? onDelete;
 
   @override
   State<SphereViewerScreen> createState() => _SphereViewerScreenState();
@@ -23,6 +37,9 @@ class _SphereViewerScreenState extends State<SphereViewerScreen> {
   final PsvBridge _bridge = PsvBridge();
   late final WebViewController _controller;
   late final Future<void> _loaded;
+
+  bool _autorotate = true;
+  bool _gyro = false;
 
   @override
   void initState() {
@@ -55,10 +72,42 @@ class _SphereViewerScreenState extends State<SphereViewerScreen> {
             future: _loaded,
             builder: (context, snap) {
               final ready = _bridge.state == ViewerState.loaded;
-              return IconButton(
-                onPressed: ready ? _toggleGyro : null,
-                icon: const Icon(Icons.threed_rotation),
-                tooltip: 'Toggle gyroscope',
+              return Row(
+                children: [
+                  IconButton(
+                    onPressed: ready ? _toggleAutorotate : null,
+                    icon: Icon(
+                        _autorotate ? Icons.pause_circle : Icons.play_circle),
+                    tooltip:
+                        _autorotate ? 'Pause autorotate' : 'Play (autorotate)',
+                  ),
+                  IconButton(
+                    onPressed: ready ? _toggleGyro : null,
+                    icon: Icon(
+                      Icons.threed_rotation,
+                      color: _gyro ? AppTheme.accent : null,
+                    ),
+                    tooltip: 'Toggle gyroscope',
+                  ),
+                  if (widget.onSave != null)
+                    IconButton(
+                      onPressed: _save,
+                      icon: const Icon(Icons.download),
+                      tooltip: 'Save to gallery',
+                    ),
+                  if (widget.onShare != null)
+                    IconButton(
+                      onPressed: _share,
+                      icon: const Icon(Icons.share),
+                      tooltip: 'Share',
+                    ),
+                  if (widget.onDelete != null)
+                    IconButton(
+                      onPressed: _delete,
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'Delete',
+                    ),
+                ],
               );
             },
           ),
@@ -96,14 +145,33 @@ class _SphereViewerScreenState extends State<SphereViewerScreen> {
     );
   }
 
+  Future<void> _toggleAutorotate() async {
+    setState(() => _autorotate = !_autorotate);
+    await _bridge.setAutorotate(_autorotate);
+  }
+
   Future<void> _toggleGyro() async {
-    await _bridge.setGyro(true);
-    if (mounted) {
+    setState(() => _gyro = !_gyro);
+    await _bridge.setGyro(_gyro);
+    if (_gyro && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
             content: Text(
                 'Gyroscope mode requested — allow motion access if prompted.')),
       );
     }
+  }
+
+  Future<void> _share() async {
+    await widget.onShare?.call();
+  }
+
+  Future<void> _save() async {
+    await widget.onSave?.call();
+  }
+
+  Future<void> _delete() async {
+    final deleted = await widget.onDelete?.call() ?? false;
+    if (deleted && mounted) Navigator.of(context).pop();
   }
 }

@@ -36,14 +36,14 @@ class SettingsScreen extends StatelessWidget {
           ListTile(
             title: const Text('Camera field of view'),
             subtitle: Text(
-                '${s.cameraFovDegrees.toStringAsFixed(0)}° — calibrate if seams misalign'),
+                '${s.cameraFovDegrees.toStringAsFixed(0)}° — calibrate if seams misalign. For the fisheye mode, set the lens’ diagonal FOV (e.g. 180°).'),
             trailing: SizedBox(
               width: 200,
               child: Slider(
                 value: s.cameraFovDegrees,
                 min: 40,
-                max: 90,
-                divisions: 50,
+                max: 180,
+                divisions: 140,
                 label: '${s.cameraFovDegrees.round()}°',
                 onChanged: (v) => controller
                     .update(controller.settings.copyWith(cameraFovDegrees: v)),
@@ -59,14 +59,44 @@ class SettingsScreen extends StatelessWidget {
             onChanged: (v) => controller
                 .update(controller.settings.copyWith(compassAssist: v)),
           ),
+          SwitchListTile(
+            title: const Text('Capture floor dot'),
+            subtitle: const Text(
+                'Include the floor target in photosphere layouts (point the camera straight down).',
+                style: TextStyle(fontSize: 12)),
+            value: s.includeFloorCapture,
+            onChanged: (v) => controller
+                .update(controller.settings.copyWith(includeFloorCapture: v)),
+          ),
           const _SectionHeader('Output'),
           SwitchListTile(
             title: const Text('Watermark'),
-            subtitle: const Text('Stamp "360sphere" on saved photos',
-                style: TextStyle(fontSize: 12)),
+            subtitle: Text('Stamp "${s.watermarkLabel}" on saved photos',
+                style: const TextStyle(fontSize: 12)),
             value: s.watermark,
             onChanged: (v) =>
                 controller.update(controller.settings.copyWith(watermark: v)),
+          ),
+          ListTile(
+            title: const Text('Watermark author'),
+            subtitle: const Text(
+                'Shown as "Created in 360Sphere by {author}". Leave empty for the plain signature.',
+                style: TextStyle(fontSize: 12)),
+            trailing: SizedBox(
+              width: 150,
+              child: TextField(
+                controller: TextEditingController(text: s.authorName)
+                  ..selection = TextSelection.fromPosition(
+                      TextPosition(offset: s.authorName.length)),
+                decoration: const InputDecoration(
+                  isDense: true,
+                  hintText: 'e.g. Rohan',
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (v) => controller
+                    .update(controller.settings.copyWith(authorName: v)),
+              ),
+            ),
           ),
           const _SectionHeader('Troubleshooting'),
           ListTile(
