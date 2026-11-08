@@ -1,0 +1,33 @@
+# Flutter/Dart
+.dart_tool/
+.packages
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+coverage/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Platform
+android/.gradle/
+android/local.properties
+android/key.properties
+*.jks
+*.keystore
+ios/Pods/
+ios/Flutter/.last_build_id
+
+# Secrets — never commit OAuth keys
+google-services.json
+*.pem
+*.pk8
+*.crt
+
+# OS
+.DS_Store
+Thumbs.db

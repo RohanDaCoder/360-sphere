@@ -1,0 +1,66 @@
+name: sphere360
+description: "360Sphere — capture, stitch and share 360° photospheres. A clean-room Flutter recreation of the 360 Photo Cam app architecture."
+publish_to: "none"
+version: 0.1.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # Camera capture
+  camera: ^0.11.0+2
+
+  # IMU sensors for gyro-guided stitching
+  sensors_plus: ^6.1.1
+
+  # 360° photo viewer (Photo Sphere Viewer in a WebView, like the original app)
+  webview_flutter: ^4.10.0
+
+  # Sharing and saving to the device gallery
+  share_plus: ^10.1.4
+  gal: ^2.3.0
+
+  # Google Maps / Street View publishing
+  google_sign_in: ^6.3.0
+  geolocator: ^13.0.2
+  http: ^1.2.2
+
+  # Persistence and state
+  shared_preferences: ^2.3.2
+  path_provider: ^2.1.4
+  provider: ^6.1.2
+
+  # Image decoding / JPEG encoding of stitched spheres
+  image: ^4.3.0
+
+  intl: ^0.20.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/viewer/
+    - assets/viewer/js/
+    - assets/fonts/
+
+  fonts:
+    - family: Montserrat
+      fonts:
+        - asset: assets/fonts/Montserrat-Regular.ttf
+        - asset: assets/fonts/Montserrat-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/Montserrat-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/Montserrat-Bold.ttf
+          weight: 700
+    - family: Inter
+      fonts:
+        - asset: assets/fonts/Inter-Regular.ttf

@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<!--
+  360Sphere viewer — immersive 360° photo viewer.
+
+  Clean-room page built on the open-source Photo Sphere Viewer 4.x runtime
+  (three.js), the same combination the analyzed app bundles in its WebView
+  viewer. The page exposes a small JS bridge:
+
+    window.appendChunk(i, total, b64)   — stream the JPEG in base64 chunks
+    window.finalizeImage()              — create/update the viewer
+    window.setGyro(enabled)             — toggle the gyroscope plugin
+  and reports back over the `PsvBridge` channel: ready | loaded | error.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <title>360Sphere</title>
+  <link rel="stylesheet" href="js/style.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #101214; overflow: hidden; }
+    #viewer { width: 100%; height: 100%; }
+    #boot {
+      position: absolute; inset: 0; display: flex; align-items: center;
+      justify-content: center; color: #ffffff88; font-family: sans-serif;
+      font-size: 14px; letter-spacing: 1px; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="viewer"></div>
+  <div id="boot">LOADING 360° PHOTO…</div>
+
+  <script src="js/three.min.js"></script>
+  <script src="js/photo-sphere-viewer.min.js"></script>
+  <script src="js/psv-autorotate-plugin.min.js"></script>
+  <script src="js/psv-gyroscope-plugin.min.js"></script>
+  <script>
+    (function () {
+      'use strict';
+
+      var chunks = [];
+      var viewer = null;
+      var bootEl = document.getElementById('boot');
+
+      function post(msg) {
+        try {
+          PsvBridge.postMessage(msg);
+        } catch (e) { /* channel not ready */ }
+      }
+
+      window.addEventListener('error', function (ev) {
+        post('error:' + (ev.message || 'unknown'));
+      });
+
+      window.appendChunk = function (i, total, b64) {
+        chunks[i] = b64;
+        if (chunks.filter(Boolean).length === total) {
+          window.finalizeImage();
+        }
+      };
+
+      window.finalizeImage = function () {
+        var missing = chunks.some(function (c, i) { return typeof c !== 'string'; });
+        if (missing) { post('error:missing chunks'); return; }
+        var dataUrl = 'data:image/jpeg;base64,' + chunks.join('');
+        bootEl.style.display = 'none';
+        try {
+          if (viewer) {
+            viewer.setPanorama(dataUrl);
+          } else {
+            viewer = new PhotoSphereViewer.Viewer({
+              container: 'viewer',
+              panorama: dataUrl,
+              caption: '360Sphere',
+              navbar: ['zoom', 'move', 'download', 'caption', 'fullscreen'],
+              defaultZoomLvl: 0,
+              minFov: 40,
+              maxFov: 100,
+              useTouchData: true,
+              plugins: [
+                [PhotoSphereViewer.AutorotatePlugin, {
+                  autostartDelay: 1200,
+                  autostartOnIdle: false,
+                  angularSpeed: '0.4rpm'
+                }],
+                [PhotoSphereViewer.GyroscopePlugin, { touch: false }]
+              ]
+            });
+          }
+          post('loaded');
+        } catch (e) {
+          post('error:' + e.message);
+        }
+      };
+
+      window.setGyro = function (enabled) {
+        if (!viewer) return;
+        try {
+          var gyro = viewer.getPlugin(PhotoSphereViewer.GyroscopePlugin);
+          if (gyro) { enabled ? gyro.start() : gyro.stop(); }
+        } catch (e) { post('error:' + e.message); }
+      };
+
+      post('ready');
+    })();
+  </script>
+</body>
+</html>
