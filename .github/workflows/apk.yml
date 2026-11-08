@@ -34,7 +34,7 @@ jobs:
     timeout-minutes: 45
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Java
         uses: actions/setup-java@v5
@@ -84,7 +84,7 @@ jobs:
           echo "Built ${APK_NAME}"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: ${{ env.APK_NAME }}
           path: build/app/outputs/flutter-apk/${{ env.APK_NAME }}
