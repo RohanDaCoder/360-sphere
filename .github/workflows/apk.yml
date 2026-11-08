@@ -84,7 +84,7 @@ jobs:
           echo "Built ${APK_NAME}"
 
       - name: Upload APK artifact
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ env.APK_NAME }}
           path: build/app/outputs/flutter-apk/${{ env.APK_NAME }}
