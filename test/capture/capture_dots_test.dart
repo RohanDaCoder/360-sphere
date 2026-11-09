@@ -224,4 +224,28 @@ void main() {
       expect(visible, isFalse);
     });
   });
+
+  group('markCaptured transitions (capture haptic gate)', () {
+    test('returns true only on the first capture of a dot', () {
+      final d = DotCaptureDirector(
+        dots: CaptureDots.layout(CaptureMode.photosphere,
+            cameraFovDeg: 62, includeFloor: true),
+      )..reset();
+
+      expect(d.markCaptured(0), isTrue); // NOT_CAPTURED → CAPTURED
+      expect(d.markCaptured(0), isFalse); // already captured
+      expect(d.markCaptured(1), isTrue);
+      expect(d.markCaptured(1), isFalse);
+    });
+
+    test('rejects invalid ids', () {
+      final d = DotCaptureDirector(
+        dots: CaptureDots.layout(CaptureMode.panoramaHorizontal,
+            cameraFovDeg: 62, includeFloor: true),
+      )..reset();
+
+      expect(d.markCaptured(-1), isFalse);
+      expect(d.markCaptured(999), isFalse);
+    });
+  });
 }

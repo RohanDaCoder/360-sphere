@@ -19,7 +19,8 @@
 
 1. **REA** (`rea-agents` 6.8.0 CLI + MCP) — `rea info`, `rea manifest`, class listing, URL/string recon over the DEX.
 2. **apkscope 0.9.0** — typed Java view of the DEX: `info`, `classes`, `decompile`, `search urls`.
-3. **hermes-dec** — decompilation of the 5.4 MB `assets/index.android.bundle` (Hermes bytecode, HBC v96) into 937,513 lines of readable pseudocode plus the full string table (20,470 unique strings).
+3. **hermes-dec** — decompilation of the 5.4 MB `assets/index.android.bundle` (Hermes bytecode, HBC v96) into 937,513 lines of readable pseudocode plus the full string table (20,470 unique strings at first pass; 33,270 literals recovered on the Wave-3 re-run).
+4. **jadx 1.5.1** (Wave 3 re-run, fresh sandbox) — DEX → Java for the app-owned classes (`--single-class … --show-bad-code` recovered the full `quaternionToEuler` body) and resource decoding for `AndroidManifest.xml`.
 
 ## Findings
 
@@ -52,20 +53,30 @@ Evidence: `MainApplication` extends `DefaultReactNativeHost` with `isHermesEnabl
 #### The native `OrientationAngle` module
 
 `com.reactnativeorientationangle.OrientationAngleModule` (decompiled with
-apkscope — the only app-owned native module besides `MainActivity`,
-`InAppReviewModule` and `MainApplication`):
+apkscope, re-verified with jadx on a fresh sandbox — the only app-owned
+native module besides `MainActivity`, `InAppReviewModule` and
+`MainApplication`):
 
 - listens to `TYPE_GAME_ROTATION_VECTOR` (fallback `TYPE_ROTATION_VECTOR`)
-  on a dedicated `HandlerThread`, throttled to 30 ms;
+  on a dedicated `HandlerThread`; the native default interval is 100 ms,
+  but the JS constants module immediately calls
+  `setUpdateInterval(SENSOR_INTERVAL)` with **30 ms** (`SENSOR_INTERVAL_LOW`
+  = 50 ms exists for a low-power mode);
 - converts the quaternion to camera-pose euler angles
-  (`pitch−90°`, `roll = asin(2(wy−xz))`, `yaw = −atan2(2(xy+wz), 1−2(y²+z²))`);
+  (`pitch−90°` with a range fix — atan2 values in (−180, −90) get +360°
+  so pitch stays in (−180, 180]; `roll = asin(2(wy−xz))`;
+  `yaw = −atan2(2(xy+wz), 1−2(y²+z²))`);
+- `normalizeAngle` **wraps into [−180, 180]** (`d > 180 → d−360`,
+  `d < −180 → d+360`) — an earlier note here claimed it only guarded ±360;
+  the fresh decompile corrected that (it matters for yaw deltas across
+  the ±180° seam);
 - clamps raw yaw deltas to ±25° per reading, low-pass filters pitch/roll/yaw
-  with α = 0.8 (yaw differences on the wrapped circle, `normalizeAngle`
-  only guards ±360);
+  with α = 0.8 (yaw differences on the wrapped circle);
 - emits `pitch`/`roll`/`yaw` events consumed by the capture worklet.
 
 Ported verbatim in `lib/capture/orientation/original_orientation_filter.dart`
-(see [REVISION.md](REVISION.md) §Wave 2).
+(see [REVISION.md](REVISION.md) §Wave 2 and the two fidelity fixes in
+§Wave 3).
 
 #### Stitching is server-side
 
@@ -87,6 +98,19 @@ animation (`assets/rendering/frame_0..45.jpg`) cycled by a 1300 ms
 `setInterval` (`useRenderingHistoriesUpdater` incrementing a
 `renderingCnt` in the app's persistent store). The GPano XMP metadata on
 finished photos is added by this server pipeline.
+
+#### Street View publish service (recovered from the bundle)
+
+The JS service is a three-step client:
+`photo:startUpload` (Bearer token, empty body) → PUT the JPEG to the
+presigned `uploadUrl` → `POST /v1/photo` with
+`{uploadReference, pose: {latLngPair: {latitude, longitude}, heading},
+captureTime: {seconds}}`. The response is mined for `photoId.id` **and**
+`shareLink` (a Google Maps URL the viewer's Google Maps button opens).
+The pose comes from the photo's stored `geo_location`
+{latitude, longitude, heading} captured by the geolocation hook at capture
+time — not re-fixed at upload time. Failures map to the eight alert
+dialogs below.
 
 #### Street View alert mapping (recovered verbatim)
 
@@ -119,6 +143,30 @@ autostart, gyroscope `touchmove: true, absolutePosition: false`.
   `Play/Gyroscope/Menu/Close/Delete/Download/Google_Maps/Share/Post/Unlock_
   Button_Tapped_On_*_Viewer_Screen`, …) — the full button map of every
   screen.
+
+#### Wave-3 additions (fresh jadx + hermes-dec pass)
+
+- **Capture haptic** — the only app-side haptic call in the bundle:
+  `HapticFeedback.trigger('impactLight', …)` fired the moment a dot flips
+  to `CAPTURED` inside the capture worklet.
+- **Capture constants** (constants module, exact values):
+  `CAPTURE_STATUS = {NOT_CAPTURED: 0, HOLDING: 1, CAPTURED: 2, CAPTURING: 3}`
+  (alphabetical values; the state-machine order differs),
+  `PROCESS_STATUS = {INITIAL: 0, CAPTURE: 1, PROCESSING: 2, DONE: 3, FAILED: 4}`,
+  `SENSOR_INTERVAL = 30`, `SENSOR_INTERVAL_LOW = 50`, `FILTER_ALPHA = 0.5`,
+  `waitHoldTime = 100`, `deltaRotationMarkAngle = 20`.
+- **HUD geometry** — `ratio = screenWidth / 375` (iPhone design width);
+  `greenTarget = 177 × 255 · 0.87 · ratio`; `gap = 20·ratio`,
+  `gapBottom = 60·ratio`, `arrowRadius = 80·ratio`; signature green
+  `#49FF83` (target dots, pin layer, active buttons).
+- **File naming** — `date2string` renders `YYYY_MM_DD_HH_mm_ss`
+  (underscores) for photo dates; downloads are named
+  `<makeRandomString(10)>.jpg`.
+- **Manifest permissions** relevant to the core pipeline: `CAMERA`,
+  `ACCESS_FINE/COARSE_LOCATION` (the geo pose), `VIBRATE` (the capture
+  haptic), `HIGH_SAMPLING_RATE_SENSORS` (the orientation module);
+  `RECORD_AUDIO` is react-native-vision-camera's video surface (the app
+  itself captures stills only).
 
 ### Feature inventory (evidence strings)
 
@@ -174,7 +222,10 @@ AWS S3 presigned uploads power photo storage; short links power sharing.
 | 360° viewer (PSV + three.js) | ✅ same runtime & configuration (vendored, base64 bridge); Play/autorotate, gyroscope, share, save, delete |
 | Street View error dialogs (8 classifications) | ✅ `lib/maps/streetview_errors.dart` + pre-flight check |
 | Share | ✅ file share (no backend, so no hosted viewer link) |
-| **Publish to Google Maps / Street View** | ✅ Street View Publish API v1 (see docs/GOOGLE-MAPS-UPLOAD.md) |
+| **Publish to Google Maps / Street View** | ✅ Street View Publish API v1 (see docs/GOOGLE-MAPS-UPLOAD.md) — `pose.latLngPair` + `captureTime {seconds}` request shapes verified against the original's decompiled publisher (Wave 3) |
+| Geo pose captured with the photo (original's `geo_location`) | ✅ best-effort GPS fix at capture start, persisted, prefills the publish sheet (Wave 3) |
+| `shareLink` from Google + "Open in Google Maps" | ✅ extracted, persisted, opened via url_launcher (Wave 3) |
+| Capture haptic (`impactLight` on each captured dot) | ✅ `HapticFeedback.lightImpact()` gated on real dot transitions (Wave 3) |
 | Watermark "Created in … by {author}" | ✅ author-name watermark setting |
 | Cloud stitching / rendering pipeline | ❌ out of scope (offline recreation stitches locally; same 4-step UX) |
 | Viewer comment pins / long-press coordinates | ❌ community backend feature (math documented above) |

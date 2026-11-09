@@ -1,18 +1,27 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../core/models.dart';
 import '../core/theme.dart';
 import 'google_auth_service.dart';
 import 'streetview_errors.dart';
 import 'streetview_publish_service.dart';
 
 /// Bottom sheet that publishes a photosphere to Google Street View / Maps.
+///
+/// [geoLocation] / [captureTime] come from the photo's capture session (the
+/// original uploads with its stored `geo_location` and capture timestamp);
+/// they prefill the pose fields, which stay editable.
 Future<void> showPublishSheet(
   BuildContext context, {
   required String imagePath,
-  required void Function(String photoId) onPublished,
+  GeoPose? geoLocation,
+  DateTime? captureTime,
+  required void Function(String photoId, String? shareLink) onPublished,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -23,16 +32,25 @@ Future<void> showPublishSheet(
     ),
     builder: (_) => _PublishSheet(
       imagePath: imagePath,
+      geoLocation: geoLocation,
+      captureTime: captureTime,
       onPublished: onPublished,
     ),
   );
 }
 
 class _PublishSheet extends StatefulWidget {
-  const _PublishSheet({required this.imagePath, required this.onPublished});
+  const _PublishSheet({
+    required this.imagePath,
+    required this.onPublished,
+    this.geoLocation,
+    this.captureTime,
+  });
 
   final String imagePath;
-  final void Function(String photoId) onPublished;
+  final GeoPose? geoLocation;
+  final DateTime? captureTime;
+  final void Function(String photoId, String? shareLink) onPublished;
 
   @override
   State<_PublishSheet> createState() => _PublishSheetState();
@@ -52,6 +70,7 @@ class _PublishSheetState extends State<_PublishSheet> {
   String? _errorTitle;
   String? _error;
   String? _photoId;
+  String? _shareLink;
 
   @override
   void initState() {
@@ -59,7 +78,16 @@ class _PublishSheetState extends State<_PublishSheet> {
     _api = StreetViewPublishService(
       accessTokenProvider: () async => _auth.accessToken(),
     );
-    _fillLocation();
+    final geo = widget.geoLocation;
+    if (geo != null) {
+      // Prefill from the position recorded at capture time (the original
+      // publishes with its stored geo_location, no re-fix needed).
+      _lat.text = geo.latitude.toStringAsFixed(6);
+      _lng.text = geo.longitude.toStringAsFixed(6);
+      _heading = geo.heading?.clamp(0, 360) ?? 0;
+    } else {
+      _fillLocation();
+    }
   }
 
   Future<void> _fillLocation() async {
@@ -78,6 +106,24 @@ class _PublishSheetState extends State<_PublishSheet> {
       if (mounted) setState(() {});
     } catch (_) {
       // leave fields empty for manual entry
+    }
+  }
+
+  /// Open Google's `shareLink` for the published photo (the original's
+  /// viewer exposes the same link behind its Google Maps button).
+  Future<void> _openShareLink() async {
+    final link = _shareLink;
+    if (link == null) return;
+    final uri = Uri.tryParse(link);
+    if (uri == null) return;
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open the link')),
+        );
+      }
     }
   }
 
@@ -123,15 +169,20 @@ class _PublishSheetState extends State<_PublishSheet> {
       await _api.uploadBytes(uploadUrl, bytes);
 
       setState(() => _phase = _PublishPhase.publishing);
-      final photoId = await _api.createPhoto(
+      final photo = await _api.createPhoto(
         uploadUrl: uploadUrl,
         latitude: lat,
         longitude: lng,
         headingDeg: _heading,
+        captureTime: widget.captureTime,
       );
 
-      setState(() => _phase = _PublishPhase.done);
-      widget.onPublished(photoId);
+      setState(() {
+        _phase = _PublishPhase.done;
+        _photoId = photo.id;
+        _shareLink = photo.shareLink;
+      });
+      widget.onPublished(photo.id, photo.shareLink);
     } on GoogleAuthException catch (e) {
       setState(() {
         _phase = _PublishPhase.error;
@@ -285,6 +336,33 @@ class _PublishSheetState extends State<_PublishSheet> {
                     Text('Street View photo id: $_photoId',
                         style: const TextStyle(
                             fontSize: 12, color: Colors.white70)),
+                    if (_shareLink != null) ...[
+                      const SizedBox(height: 8),
+                      Builder(builder: (context) {
+                        final link = _shareLink!;
+                        return Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            FilledButton.tonalIcon(
+                              onPressed: _openShareLink,
+                              icon: const Icon(Icons.map, size: 18),
+                              label: const Text('Open in Google Maps'),
+                            ),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                Clipboard.setData(ClipboardData(text: link));
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(content: Text('Link copied')),
+                                );
+                              },
+                              icon: const Icon(Icons.link, size: 18),
+                              label: const Text('Copy link'),
+                            ),
+                          ],
+                        );
+                      }),
+                    ],
                     const SizedBox(height: 4),
                     const Text(
                       'It may take some time before the photo appears on Google Maps.',

@@ -31,6 +31,9 @@ dependencies:
   geolocator: ^14.1.2
   http: ^1.2.2
 
+  # Opening the Street View share link (the original's Google Maps button)
+  url_launcher: ^6.3.1
+
   # Persistence and state
   shared_preferences: ^2.3.2
   path_provider: ^2.1.4

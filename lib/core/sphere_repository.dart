@@ -60,6 +60,7 @@ class SphereRepository {
     required int frameCount,
     required bool watermarked,
     String description = '',
+    GeoPose? geoLocation,
   }) async {
     final id = 'sp_${DateTime.now().millisecondsSinceEpoch}_${_randSuffix()}';
     final imageFile = File('${spheresDir.path}/$id.jpg');
@@ -77,6 +78,7 @@ class SphereRepository {
       frameCount: frameCount,
       description: description,
       watermarked: watermarked,
+      geoLocation: geoLocation,
     );
 
     final all = await list();

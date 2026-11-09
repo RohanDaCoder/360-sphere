@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../core/models.dart';
 import '../core/sphere_repository.dart';
@@ -99,7 +100,7 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
             ),
           ),
           const SizedBox(height: 12),
-          if (sphere.streetViewPhotoId != null)
+          if (sphere.streetViewPhotoId != null) ...[
             Container(
               padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
@@ -120,6 +121,16 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
                 ],
               ),
             ),
+            if (sphere.streetViewShareLink != null)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: OutlinedButton.icon(
+                  onPressed: () => _openLink(sphere.streetViewShareLink!),
+                  icon: const Icon(Icons.map, size: 18),
+                  label: const Text('View on Google Maps'),
+                ),
+              ),
+          ],
           const SizedBox(height: 8),
           Text(
             _metaLine(sphere),
@@ -177,8 +188,11 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
                 ? () => showPublishSheet(
                       context,
                       imagePath: repo.imagePath(sphere),
-                      onPublished: (photoId) async {
+                      geoLocation: sphere.geoLocation,
+                      captureTime: sphere.createdAt,
+                      onPublished: (photoId, shareLink) async {
                         sphere.streetViewPhotoId = photoId;
+                        sphere.streetViewShareLink = shareLink;
                         await repo.update(sphere);
                         _load();
                       },
@@ -204,6 +218,21 @@ class _SphereDetailScreenState extends State<SphereDetailScreen> {
       await action();
     } catch (e) {
       _toast('Failed: $e');
+    }
+  }
+
+  /// Open the photo's Street View share link in the browser/Maps app
+  /// (parity with the original's Google Maps viewer button).
+  Future<void> _openLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      _toast('Invalid link');
+      return;
+    }
+    try {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      _toast('Could not open the link');
     }
   }
 

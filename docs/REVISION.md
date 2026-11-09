@@ -9,7 +9,113 @@ the Street View alert mapping, the PhotoNameScreen flow and the import
 flow from the bundle. Each row records what the original does, where the
 evidence lives, what the recreation had, and the decision taken.
 
-## Wave 2 — deep revision pass (this change)
+Wave 3 re-ran the whole toolchain from scratch on a fresh sandbox
+(jadx for the DEX/manifest, hermes-dec for the Hermes bundle — 937,513
+lines of pseudocode and 33,270 unique strings) and audited the earlier
+ports against it. It found **two real bugs in the Street View publisher
+and two fidelity bugs in the orientation filter port**, plus a handful of
+unported behaviors — all fixed below.
+
+## Wave 3 — independent re-verification pass (this change)
+
+### 1. Street View pose field: `latLngPair`, not `latLng` (bug)
+
+**Original** — the decompiled `uploadToStreetView` service assembles the
+`photo.create` body as:
+
+```js
+{ uploadReference: {uploadUrl},
+  pose: { latLngPair: {latitude, longitude}, heading },
+  captureTime: {seconds: Math.floor(ms / 1000)} }
+```
+
+and Google's REST reference confirms `Pose.latLngPair` (object with
+`latitude`/`longitude`) is the documented field — `latLng` does not exist.
+
+**Bug** — this recreation sent `pose.latLng` and a flat
+`captureTimeSeconds` field. Both are silently ignored by the API, so every
+published photo would have been created **without a position** (rejected
+with *"Location Required"* or stranded unplaced).
+
+**Fix** — `streetview_publish_service.dart` now sends `pose.latLngPair`
+and `captureTime: {seconds}`, pinned by
+`test/maps/streetview_publish_service_test.dart` (request-shape
+assertions, full 3-step flow, error surfacing).
+
+### 2. The `shareLink` returned by Google (ported)
+
+**Original** — `photo.create` responses are mined for `photoId.id` *and*
+`shareLink`; the viewer's Google Maps button opens that link.
+
+**Recreation now** — `createPhoto` returns a `StreetViewPhoto` record
+(id + shareLink); the publish sheet offers *Open in Google Maps* / *Copy
+link*, the link is persisted on the photo record
+(`streetViewShareLink`) and the detail screen shows a *View on Google
+Maps* action for published photos (via `url_launcher`).
+
+### 3. Geo pose captured with the photo, not at publish time (ported)
+
+**Original** — the capture screen's geolocation hook (a debounced
+`getCurrentPosition`) stores `geo_location`
+{latitude, longitude, heading} on the photo record when it is captured;
+publishing reuses that stored pose (plus the photo's `captureTime`).
+
+**Recreation now** — `CaptureSessionController.start()` takes a
+best-effort GPS fix (injectable `geoProvider`, never blocks or fails
+capture), the finished photo persists a `GeoPose`
+(`lib/core/models.dart`), and the publish sheet prefills latitude,
+longitude and heading from it — falling back to a fresh fix or manual
+entry when no fix exists. The real capture timestamp (not publish time)
+is sent as `captureTime`.
+
+```mermaid
+flowchart LR
+    A[Capture session starts] -->|best-effort GPS fix| B[GeoPose<br/>lat · lng · heading]
+    B -->|persisted with the photo| C[(sphere store)]
+    C --> D[Publish sheet<br/>prefilled from GeoPose]
+    D --> E["photo:startUpload"]
+    E --> F[PUT jpeg bytes]
+    F --> G["photo.create<br/>pose.latLngPair + heading<br/>captureTime {seconds}"]
+    G -->|photoId + shareLink| H[Open in Google Maps]
+    style G stroke:#49FF83,stroke-width:2px
+    style H stroke:#49FF83,stroke-width:2px
+```
+
+### 4. Orientation filter fidelity fixes (2 bugs)
+
+Re-decompiling `OrientationAngleModule` with `jadx --show-bad-code`
+recovered the full `quaternionToEuler` body and corrected two details of
+the earlier port (`original_orientation_filter.dart`):
+
+| Detail | Original (fresh decompile) | Port had | Now |
+| --- | --- | --- | --- |
+| `normalizeAngle` range | wraps into **[−180, 180]** (`d > 180 → −360`, `d < −180 → +360`) | only guarded ±360 — a yaw move from +170° to −170° was read as **−340°** (clamped to −25°, wrong direction) instead of **+20°** | wraps to [−180, 180]; seam cases pinned by new tests |
+| Pitch range fix | `if (deg < 0 && |deg| > 90) deg += 360` before the −90° shift (keeps pitch in (−180, 180]) | threshold `> 200` — dead code (atan2 never ≤ −200), pitch could leave the range as −270…−180 | threshold 90, matching the module |
+| Sensor interval | native default 100 ms, but the JS constants module calls `setUpdateInterval(SENSOR_INTERVAL)` with **30 ms** | documented as "30 ms" (correct end-to-end) | docs now record both numbers |
+
+The ±25° raw-yaw clamp (`MAX_RAW_YAW_DELTA`), the α = 0.8 low-pass with
+wrapped yaw differences and the euler formulas were re-verified unchanged.
+
+### 5. Capture haptic (ported)
+
+**Original** — the capture worklet calls
+`HapticFeedback.trigger('impactLight', …)` at the exact moment a dot
+flips to `CAPTURED` (the only app-side haptic site in the bundle).
+
+**Recreation now** — `HapticFeedback.lightImpact()` fires when a dot
+actually transitions (`DotCaptureDirector.markCaptured` now reports
+whether it flipped; re-captures don't re-fire).
+
+### 6. Constants re-verified
+
+The fresh constants block confirms every Wave-1 number, plus two details
+now recorded in REA-ANALYSIS.md: the enum **values**
+`CAPTURE_STATUS = {NOT_CAPTURED: 0, HOLDING: 1, CAPTURED: 2, CAPTURING: 3}`
+(alphabetical; the state machine order differs from the numeric order) and
+the layout scaling base `ratio = screenWidth / 375` (iPhone design width)
+with `greenTarget = 177 × 255 · 0.87 · ratio`.
+
+## Wave 2 — deep revision pass
 
 ### 1. Native orientation pipeline (`OrientationAngle` module)
 
@@ -213,14 +319,28 @@ photosphere/fisheye layouts include the floor dot).
 | --- | --- |
 | Cloud stitching / rendering pipeline (frame upload → server stitch → `processingState` polling, transfer statuses, 46-frame rendering animation) | Requires the original's backend; the recreation stitches locally on-device instead, reporting the same 4-step progress UX. The cloud API surface is documented in REA-ANALYSIS.md. |
 | Spatial comment pins in the viewer (marker layer, long-press → yaw/pitch, fly-to, reply badges) | Community feature — depends on the comments backend (`/api/v2/comments/`). The long-press → spherical coordinate math is documented in REA-ANALYSIS.md should a local annotation layer ever be wanted. |
-| Hosted share links (`share.360photo.cam/viewer/`), short links, Facebook posting | Requires the original's backend (`360app.dospace.tech`) — out of the core-pipeline scope; the API surface is documented in REA-ANALYSIS.md for a future backend. |
+| Hosted share links (`share.360photo.cam/viewer/`), short links, Facebook posting | Requires the original's backend (`360app.dospace.tech`) — out of the core-pipeline scope; the API surface is documented in REA-ANALYSIS.md for a future backend. (The Street View `shareLink` for *published* photos is ported — see Wave 3.) |
 | Community showcase, content guidelines | Backend + moderation features. |
 | Auth (email code / Apple / Google sign-in for the app account), unlock credits, watermark lock, subscriptions (RevenueCat `10_credits_monthly`, Lifetime) | Monetization and account system; the recreation is offline-first and free of the credit economy. |
 | Push notifications (OneSignal), Branch deep links, analytics events | Growth/engagement infrastructure tied to the backend. |
-| "Open on Google Maps" link for published photos | Needs the published photo's pose to be stored and a URL launcher dependency; the Street View photo id is kept and shown instead. |
 | "Slow Connection Detected" banners, "Please allow access to the Camera from settings" dialog | Tied to the cloud flow / a permission-handler dependency; the camera plugin already surfaces permission errors with a Retry action. |
 
 ## Test coverage added
+
+### Wave 3
+
+- `test/maps/streetview_publish_service_test.dart` — `pose.latLngPair`
+  request shape (and `latLng` absence), `captureTime {seconds}` shape,
+  optional-field omission, `shareLink` extraction, missing-photoId
+  failure, full 3-step publish flow ordering, HTTP error surfacing.
+- `test/capture/original_orientation_filter_test.dart` — new seam tests
+  (yaw 170° → −170° is +20°, not −340°/−25°; convergence to −170°) and
+  pitch range-fix tests (−95° reads +175°; −85° stays −175°).
+- `test/core/models_test.dart` — `GeoPose` JSON round-trip, optional-field
+  omission, `Photosphere` geo/share-link persistence, legacy records
+  without the new fields.
+- `test/capture/capture_dots_test.dart` — `markCaptured` returns true only
+  on the first transition (the haptic gate), invalid-id rejection.
 
 ### Wave 2
 
@@ -249,4 +369,5 @@ photosphere/fisheye layouts include the floor dot).
 - `test/capture/fisheye_projection_test.dart` — equidistant mapping, rim
   cases, rejection outside the lens circle, mesh-builder smoke test.
 
-94 unit tests total, `flutter analyze` clean.
+94 unit tests at the end of Wave 2; **109** after Wave 3, `flutter
+analyze` clean.

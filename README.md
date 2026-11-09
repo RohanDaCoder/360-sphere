@@ -22,7 +22,8 @@ equirectangular photo you can view immersively, share, and publish.
   an optional floor dot.
 - 📷 **Five capture modes** — photosphere + horizontal / vertical /
   wide-angle / fisheye panoramas, matching the original's mode set; the
-  fisheye mode warps through an equidistant lens model.
+  fisheye mode warps through an equidistant lens model. A light haptic
+  ticks whenever a target dot is captured, like the original.
 - 🧵 **Skia mesh-warp stitching** — camera frames are warped onto the
   equirectangular projection through a per-vertex feathered textured mesh
   (`Canvas.drawVertices`), the same offscreen-texture technique the original
@@ -30,7 +31,10 @@ equirectangular photo you can view immersively, share, and publish.
 - 🖼️ **Immersive viewer** — Photo Sphere Viewer + three.js (vendored), with
   Play (autorotate), gyroscope, share, save and delete actions.
 - 🗺️ **Publish to Google Maps** — full Street View Publish API flow
-  (sign-in, upload, geo-pose). See [docs/GOOGLE-MAPS-UPLOAD.md](docs/GOOGLE-MAPS-UPLOAD.md).
+  (sign-in, upload, geo-pose). The position and heading are recorded with
+  the photo at capture time, and Google's `shareLink` comes back for a
+  one-tap *View on Google Maps*.
+  See [docs/GOOGLE-MAPS-UPLOAD.md](docs/GOOGLE-MAPS-UPLOAD.md).
 - 🔗 **Share & save** — share the equirect image anywhere; save to the
   gallery.
 - ✍️ **Author watermark** — "Created in 360Sphere by {author}", following
@@ -43,7 +47,7 @@ equirectangular photo you can view immersively, share, and publish.
 ```bash
 flutter pub get
 flutter run          # on an Android device (camera + sensors required)
-flutter test         # 53 unit tests: dots, hold-to-capture, fusion, projection, mesh, EXIF
+flutter test         # 109 unit tests: dots, hold-to-capture, fusion, projection, mesh, XMP, Street View
 flutter build apk    # release APK
 ```
 

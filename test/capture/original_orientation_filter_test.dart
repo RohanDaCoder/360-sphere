@@ -48,6 +48,23 @@ void main() {
       final (_, roll, _) = f.update(q);
       expect(roll.abs(), closeTo(90, 1e-6));
     });
+
+    test('pitch past straight-down maps into (−180, 180], not −270…−180', () {
+      // The module's range fix: atan2 values in (−180, −90) get +360°
+      // before the −90° shift. A −95° X rotation (5° past straight down)
+      // reads as pitch −95 − 90 = −185 ≡ +175, reported as +175.
+      final f = OriginalOrientationFilter();
+      final (pitch, _, _) = f.update(_rot(_xAxis, -95));
+      expect(pitch, closeTo(175, 1e-6));
+      expect(pitch, lessThanOrEqualTo(180));
+    });
+
+    test('pitch just above the fix threshold stays put', () {
+      // −90° exactly (and anything in [−90, 0)) is NOT lifted.
+      final f = OriginalOrientationFilter();
+      final (pitch, _, _) = f.update(_rot(_xAxis, -85));
+      expect(pitch, closeTo(-175, 1e-6));
+    });
   });
 
   group('OriginalOrientationFilter — yaw jump clamp (±25°)', () {
@@ -80,6 +97,31 @@ void main() {
       }
       expect(lastYaw, greaterThan(80));
       expect(lastYaw, lessThan(100));
+    });
+
+    test('a turn across the ±180° seam is small, not 340°', () {
+      // The module's normalizeAngle wraps into [−180, 180]: turning right
+      // from +170° by 20° ends at 190° ≡ −170°. The raw delta of −340°
+      // must be read as +20°, not clamped to −25° in the wrong direction
+      // (the pre-fix bug treated it as −340 → −25).
+      final f = OriginalOrientationFilter();
+      f.update(_rot(_zAxis, -170)); // yaw +170
+      expect(f.yawDeg, closeTo(170, 1e-6));
+      // Physical right turn of 20°: yaw 170 → 190 ≡ −170.
+      final (_, _, yaw) = f.update(_rot(_zAxis, 170));
+      // Clamped target −170; filtered 170 + 0.8·(+20) = 186 ≡ −174.
+      expect(yaw, closeTo(-174, 1e-6));
+    });
+
+    test('seam-crossing yaw keeps converging in the right direction', () {
+      final f = OriginalOrientationFilter();
+      f.update(_rot(_zAxis, -170)); // yaw +170
+      // Feed the −170 yaw repeatedly; the filter must settle at −170
+      // (with the ±360-guard bug it ran away toward +150).
+      for (var i = 0; i < 30; i++) {
+        f.update(_rot(_zAxis, 170));
+      }
+      expect(f.yawDeg, closeTo(-170, 1e-3));
     });
   });
 

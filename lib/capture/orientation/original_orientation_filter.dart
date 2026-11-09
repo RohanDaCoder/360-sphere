@@ -11,9 +11,11 @@ import 'quaternion.dart';
 /// filters the result before emitting `pitch` / `roll` / `yaw` events that
 /// drive the capture UI. This class reproduces that math exactly:
 ///
-/// * **pitch** = `atan2(2·(w·x + y·z), 1 − 2·(x² + y²))` normalized into
-///   (−200°, 360°) and shifted by **−90°** so an upright phone reads 0° and
+/// * **pitch** = `atan2(2·(w·x + y·z), 1 − 2·(x² + y²))`, mapped from
+///   (−180, −90) up into (180, 270) when it dips below −90° (the module's
+///   range fix), then shifted by **−90°** so an upright phone reads 0° and
 ///   looking up reads positive (matches the dot layout rows at ±45°/±90°);
+///   the output stays in (−180°, 180°];
 /// * **roll** = `asin(2·(w·y − x·z))`;
 /// * **yaw** = `−atan2(2·(x·y + w·z), 1 − 2·(y² + z²))`, so yaw increases
 ///   while turning to the right;
@@ -62,7 +64,10 @@ class OriginalOrientationFilter {
     var p = math.atan2(2 * (w * x + y * z), 1 - 2 * (x * x + y * y)) *
         180 /
         math.pi;
-    if (p < 0 && p.abs() > 200) p += 360;
+    // The module's range fix: atan2 values below −90° (i.e. in
+    // (−180, −90)) are lifted by +360° so the post-shift pitch stays
+    // inside (−180°, 180°] instead of wrapping to −270…−180.
+    if (p < 0 && p.abs() > 90) p += 360;
     final pitchOut = p - 90;
 
     // roll: Y-axis rotation via asin.
@@ -123,15 +128,15 @@ class OriginalOrientationFilter {
   }
 
   static double _normalize(double deg) {
-    // The module's normalizeAngle is only a ±360 guard — values inside
-    // (−360, 360] pass through unchanged (yaw may legitimately sit at e.g.
-    // −20 after a clamped jump; the capture worklet's angleDiffW handles
-    // the wraparound when comparing with dot yaw positions).
+    // The module's normalizeAngle wraps into [−180, 180] (values > 180°
+    // fold back, values < −180° fold forward) — verified against the
+    // decompiled `OrientationAngleModule.normalizeAngle`. This matters at
+    // the seam: a turn from +170° to −170° is a −20° move, not +340°.
     var d = deg;
-    while (d > 360) {
+    while (d > 180) {
       d -= 360;
     }
-    while (d < -360) {
+    while (d < -180) {
       d += 360;
     }
     return d;

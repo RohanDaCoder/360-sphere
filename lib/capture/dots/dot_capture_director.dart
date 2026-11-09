@@ -94,15 +94,19 @@ class DotCaptureDirector {
     return (elapsed / holdDuration.inMilliseconds).clamp(0.0, 1.0);
   }
 
-  /// Mark a dot captured (called after its frame was taken).
-  void markCaptured(int id) {
-    if (id < 0 || id >= statuses.length) return;
+  /// Mark [id] captured (called after its frame was taken). Returns true
+  /// when the dot actually transitioned (the caller uses this to fire the
+  /// capture haptic exactly once).
+  bool markCaptured(int id) {
+    if (id < 0 || id >= statuses.length) return false;
+    final already = statuses[id] == DotStatus.captured;
     statuses[id] = DotStatus.captured;
     if (holdId == id) {
       holdId = -1;
       _holdStart = null;
     }
     if (targetId == id) _prevTarget = -1;
+    return !already;
   }
 
   /// Feed one sensor-derived aim sample. [angularVelocityDegPerSec] is the

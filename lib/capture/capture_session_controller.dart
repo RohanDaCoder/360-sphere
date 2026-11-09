@@ -5,6 +5,8 @@ import 'dart:ui' as ui;
 
 import 'package:camera/camera.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 
 import '../core/models.dart';
@@ -39,11 +41,17 @@ class CaptureSessionController extends ChangeNotifier {
     required this.settings,
     required this.repository,
     required CameraController camera,
-  }) : _camera = camera;
+    Future<GeoPose?> Function()? geoProvider,
+  })  : _camera = camera,
+        _geoProvider = geoProvider ?? captureGeoPose;
 
   final Settings settings;
   final SphereRepository repository;
   final CameraController _camera;
+
+  /// Best-effort position fix for the session (the original app records a
+  /// `geo_location` with each photo and reuses it as the Street View pose).\n  /// Injectable so tests can pin or null it out.
+  final Future<GeoPose?> Function() _geoProvider;
 
   final OrientationTracker _tracker = OrientationTracker();
 
@@ -82,6 +90,10 @@ class CaptureSessionController extends ChangeNotifier {
 
   /// Result of the last finished session.
   Photosphere? result;
+
+  /// Position where this session is being captured (fetched at start,
+  /// attached to the saved photo, used as the Street View pose).
+  GeoPose? geoLocation;
 
   /// Current step of the finishing pipeline (1–4), like the original's
   /// "Stitching... Step X/4" progress.
@@ -126,6 +138,13 @@ class CaptureSessionController extends ChangeNotifier {
         ..reset();
       _dt.reset();
       _dt.start();
+
+      // Position fix for this session — the original records
+      // geo_location with every photo; failures are non-fatal.
+      geoLocation = null;
+      unawaited(_geoProvider().then((g) {
+        if (g != null && phase != CapturePhase.idle) geoLocation = g;
+      }).catchError((_) => null));
 
       await _gyroSub?.cancel();
       await _accelSub?.cancel();
@@ -276,7 +295,11 @@ class CaptureSessionController extends ChangeNotifier {
         projector: _projector,
       );
       _coverage?.markFrame(q, cam);
-      if (dotId >= 0) director?.markCaptured(dotId);
+      if (dotId >= 0 && director?.markCaptured(dotId) == true) {
+        // The original's capture worklet fires an `impactLight` haptic the
+        // moment a dot flips to CAPTURED.
+        HapticFeedback.lightImpact();
+      }
       capturedFrames = _stitcher?.frameCount ?? capturedFrames;
       previewImage = _stitcher?.preview;
       _updateGap();
@@ -352,6 +375,7 @@ class CaptureSessionController extends ChangeNotifier {
         height: image.height,
         frameCount: capturedFrames,
         watermarked: settings.watermark,
+        geoLocation: geoLocation,
       );
       phase = CapturePhase.done;
       notifyListeners();
@@ -382,6 +406,38 @@ class CaptureSessionController extends ChangeNotifier {
     stopAutoCapture();
     debugPrint('[CaptureSession] $message');
     notifyListeners();
+  }
+
+  /// One-shot GPS fix for the session pose (best effort, never throws).
+  ///
+  /// Mirrors the original's geolocation hook: `latitude`, `longitude`,
+  /// optional `heading`/`accuracy`. Denied or unavailable → null (publishing
+  /// falls back to entering the position manually).
+  static Future<GeoPose?> captureGeoPose() async {
+    try {
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        return null;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 8),
+        ),
+      );
+      return GeoPose(
+        latitude: pos.latitude,
+        longitude: pos.longitude,
+        heading: pos.heading > 0 ? pos.heading : null,
+        accuracy: pos.accuracy > 0 ? pos.accuracy : null,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

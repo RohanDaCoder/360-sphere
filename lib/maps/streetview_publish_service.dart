@@ -10,7 +10,12 @@ import 'package:http/http.dart' as http;
 /// Maps. The flow is three calls:
 ///   1. `photo:startUpload` → short-lived upload URL
 ///   2. `PUT` the JPEG bytes to that URL
-///   3. `POST /v1/photo` with the upload reference + pose (lat/lng/heading)
+///   3. `POST /v1/photo` with the upload reference + pose (lat/lng/heading
+///      + capture time)
+///
+/// The request shapes match the original app's decompiled publisher:
+/// `pose.latLngPair` (the API's field name — NOT `latLng`),
+/// `captureTime: {seconds}` and the `shareLink` returned by Google.
 class StreetViewPublishService {
   StreetViewPublishService({
     http.Client? client,
@@ -63,9 +68,12 @@ class StreetViewPublishService {
   /// Step 3: register the photo with its geographic pose.
   ///
   /// [headingDeg] is the compass heading of the photo center (0–360).
-  /// Returns the new photo's resource name (id), e.g.
-  /// `UsCYASnSYm6pVzgD4YqJdTbB`.
-  Future<String> createPhoto({
+  /// [captureTime] should be the moment the photo was taken (the original
+  /// passes its stored capture timestamp; Google shows it on Maps).
+  ///
+  /// Returns the new photo's id (e.g. `UsCYASnSYm6pVzgD4YqJdTbB`) plus the
+  /// `shareLink` Google generates for it — the original stores both.
+  Future<StreetViewPhoto> createPhoto({
     required String uploadUrl,
     required double latitude,
     required double longitude,
@@ -74,12 +82,15 @@ class StreetViewPublishService {
   }) async {
     final body = <String, dynamic>{
       'uploadReference': {'uploadUrl': uploadUrl},
+      // NOTE: the API field is `latLngPair` (Pose.latLngPair), not `latLng`.
       'pose': {
-        'latLng': {'latitude': latitude, 'longitude': longitude},
+        'latLngPair': {'latitude': latitude, 'longitude': longitude},
         if (headingDeg != null) 'heading': headingDeg,
       },
       if (captureTime != null)
-        'captureTimeSeconds': captureTime.millisecondsSinceEpoch ~/ 1000,
+        'captureTime': {
+          'seconds': captureTime.millisecondsSinceEpoch ~/ 1000,
+        },
     };
     final res = await _client.post(
       Uri.parse('$_base/photo'),
@@ -92,15 +103,17 @@ class StreetViewPublishService {
     if (id == null || id.isEmpty) {
       throw StreetViewException('photo.create returned no photoId');
     }
-    return id;
+    final shareLink = photo['shareLink'] as String?;
+    return StreetViewPhoto(id: id, shareLink: shareLink);
   }
 
   /// Convenience: run the full three-step publish.
-  Future<String> publish({
+  Future<StreetViewPhoto> publish({
     required Uint8List jpeg,
     required double latitude,
     required double longitude,
     double? headingDeg,
+    DateTime? captureTime,
   }) async {
     final url = await startUpload();
     await uploadBytes(url, jpeg);
@@ -109,7 +122,7 @@ class StreetViewPublishService {
       latitude: latitude,
       longitude: longitude,
       headingDeg: headingDeg,
-      captureTime: DateTime.now(),
+      captureTime: captureTime,
     );
   }
 
@@ -146,4 +159,16 @@ class StreetViewException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// A photo successfully registered with Street View.
+///
+/// Mirrors the fields the original app keeps after publishing: the photo id
+/// and the `shareLink` (a `google.com/maps/...` URL that opens the photo —
+/// the original's viewer shows it behind its Google Maps button).
+class StreetViewPhoto {
+  StreetViewPhoto({required this.id, this.shareLink});
+
+  final String id;
+  final String? shareLink;
 }
