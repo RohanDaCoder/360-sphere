@@ -1,6 +1,7 @@
 import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +10,7 @@ import '../core/settings.dart';
 import '../core/sphere_repository.dart';
 import '../core/theme.dart';
 import '../gallery/sphere_detail_screen.dart';
+import 'camera_permission.dart';
 import 'capture_session_controller.dart';
 import 'widgets/capture_hud.dart';
 
@@ -26,6 +28,14 @@ class _CameraScreenState extends State<CameraScreen>
   CameraController? _camera;
   CaptureSessionController? _session;
   String? _cameraError;
+
+  /// Set when the camera permission is permanently denied — the OS dialog
+  /// can no longer be shown, so the only path forward is the app settings
+  /// page (the original app shows its "Please allow access to the Camera
+  /// from settings" dialog for this case).
+  bool _cameraPermissionPermanentlyDenied = false;
+
+  final CameraPermissionGate _permissionGate = CameraPermissionGate();
 
   /// Whether the first-run capture instructions overlay is showing (the
   /// original app shows "Plant your feet and rotate in one spot." / "Stand
@@ -51,8 +61,44 @@ class _CameraScreenState extends State<CameraScreen>
   }
 
   Future<void> _initCamera() async {
+    if (_cameraError != null || _cameraPermissionPermanentlyDenied) {
+      // Called via Retry or the return-from-settings auto-retry: clear the
+      // old error first. (The initial call from initState has nothing to
+      // clear, so no setState happens during initState.)
+      setState(() {
+        _cameraError = null;
+        _cameraPermissionPermanentlyDenied = false;
+      });
+    }
+
+    // The manifest only *declares* CAMERA; on Android 6+ it must also be
+    // requested at runtime. The camera plugin never shows the OS dialog
+    // itself, and without a grant the preview surface never receives
+    // frames — a black camera screen with no error (issue: "enter the
+    // camera mode, the screen is black").
+    final outcome = await _permissionGate.ensure();
+    if (!mounted) return;
+    switch (outcome) {
+      case CameraPermissionOutcome.granted:
+        break;
+      case CameraPermissionOutcome.denied:
+        setState(() =>
+            _cameraError = 'Camera access is required to capture 360° photos.');
+        return;
+      case CameraPermissionOutcome.permanentlyDenied:
+        setState(() {
+          _cameraError = 'Please allow access to the Camera from settings.';
+          _cameraPermissionPermanentlyDenied = true;
+        });
+        return;
+    }
+
     try {
       final cameras = await availableCameras();
+      if (cameras.isEmpty) {
+        setState(() => _cameraError = 'No camera found on this device.');
+        return;
+      }
       final back = cameras.firstWhere(
         (c) => c.lensDirection == CameraLensDirection.back,
         orElse: () => cameras.first,
@@ -78,11 +124,27 @@ class _CameraScreenState extends State<CameraScreen>
       });
     } on CameraException catch (e) {
       setState(() => _cameraError = e.description ?? e.code);
+    } catch (e) {
+      // Surface *every* failure (e.g. camera-in-use errors thrown as
+      // PlatformException) — otherwise the screen sits on "Starting
+      // camera…" forever.
+      setState(() => _cameraError = 'Camera error: $e');
     }
   }
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Returning from the OS permission dialog or the system Settings page:
+    // if the camera never started, try again — the grant may have just
+    // been given there (retrying is harmless when it wasn't: the status
+    // check just re-reports the error).
+    if (state == AppLifecycleState.resumed &&
+        _camera == null &&
+        _session == null &&
+        _cameraError != null) {
+      _initCamera();
+      return;
+    }
     final cam = _camera;
     if (cam == null) return;
     if (state == AppLifecycleState.inactive ||
@@ -132,11 +194,16 @@ class _CameraScreenState extends State<CameraScreen>
                 ),
                 if (_cameraError != null) ...[
                   const SizedBox(height: 16),
+                  if (_cameraPermissionPermanentlyDenied) ...[
+                    FilledButton.icon(
+                      icon: const Icon(Icons.settings),
+                      label: const Text('Open Settings'),
+                      onPressed: openAppSettings,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                   FilledButton(
-                    onPressed: () {
-                      setState(() => _cameraError = null);
-                      _initCamera();
-                    },
+                    onPressed: _initCamera,
                     child: const Text('Retry'),
                   ),
                 ],

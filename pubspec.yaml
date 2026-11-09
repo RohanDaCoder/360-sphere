@@ -12,6 +12,9 @@ dependencies:
 
   # Camera capture
   camera: ^0.12.2
+  # Runtime camera permission request (the manifest declaration alone does
+  # not show the OS dialog; without it the camera preview stays black)
+  permission_handler: ^12.0.1
 
   # IMU sensors for gyro-guided stitching
   sensors_plus: ^7.1.1
